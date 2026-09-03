@@ -1,0 +1,77 @@
+# ==========================================
+# Quotation Modal - Git Ignore
+# ==========================================
+
+# ---------- Environment Variables ----------
+.env
+.env.*
+!.env.example
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---------- Node / React ----------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+
+# Vite
+.vite/
+
+# ---------- IDE ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ---------- Logs ----------
+*.log
+logs/
+
+# ---------- Coverage ----------
+coverage/
+
+# ---------- Temporary files ----------
+*.tmp
+*.temp
+*.bak
+
+# ---------- Database ----------
+*.db
+*.sqlite
+*.sqlite3
+
+# ---------- Generated files ----------
+*.pyc
+*.pyo
+
+# ---------- Uploads / Generated Documents ----------
+uploads/
+generated/
