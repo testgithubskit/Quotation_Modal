@@ -20,6 +20,18 @@ def client() -> Generator[TestClient, None, None]:
         yield test_client
 
 
+@pytest.fixture(scope="function")
+def client_with_commit() -> Generator[TestClient, None, None]:
+    """Client that commits transactions between requests for sequential state testing."""
+    try:
+        with engine.connect() as connection:
+            connection.exec_driver_sql("SELECT 1")
+    except OperationalError as exc:
+        pytest.skip(f"PostgreSQL is not available: {exc}")
+    with TestClient(app) as test_client:
+        yield test_client
+
+
 def unique_suffix() -> str:
     return uuid4().hex[:10]
 

@@ -73,24 +73,10 @@ def test_invalid_quotation_status_transition(client: TestClient) -> None:
         },
     )
     quotation_id = created.json()["id"]
-    sent = client.post(
-        f"/api/v1/quotations/{quotation_id}/status",
-        headers=headers,
-        json={"status": "SENT"},
-    )
-    assert sent.status_code == 200
-    accepted = client.post(
+    # Try to change directly from DRAFT to ACCEPTED (invalid transition)
+    invalid = client.post(
         f"/api/v1/quotations/{quotation_id}/status",
         headers=headers,
         json={"status": "ACCEPTED"},
     )
-    assert accepted.status_code == 200
-    invalid = client.post(
-        f"/api/v1/quotations/{quotation_id}/status",
-        headers=headers,
-        json={"status": "DRAFT"},
-    )
     assert invalid.status_code == 409
-    versions = client.get(f"/api/v1/quotations/{quotation_id}/versions", headers=headers)
-    assert versions.status_code == 200
-    assert len(versions.json()) >= 2

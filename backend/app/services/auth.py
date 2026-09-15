@@ -42,6 +42,7 @@ class AuthService:
                 "code": payload.organization_code.upper(),
                 "email": payload.email,
                 "phone": payload.phone,
+                "address": payload.address,
                 "custom_data": {},
             },
         )

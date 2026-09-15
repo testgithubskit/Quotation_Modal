@@ -10,6 +10,7 @@ from app.schemas.common import ORMModel
 class SignupRequest(BaseModel):
     organization_name: str = Field(..., min_length=2, max_length=255)
     organization_code: str = Field(..., min_length=2, max_length=50)
+    address: Optional[str] = Field(None, max_length=1000)
     email: EmailStr
     password: str = Field(..., min_length=8, max_length=128)
     full_name: str = Field(..., min_length=2, max_length=255)

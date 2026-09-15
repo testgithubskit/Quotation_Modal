@@ -50,13 +50,25 @@ app = FastAPI(
 
 register_exception_handlers(app)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# In DEBUG, also allow LAN/localhost Vite origins (e.g. http://172.18.7.89:5176).
+# Starlette returns 400 on OPTIONS when Origin is not allowed.
+_cors_kwargs = {
+    "allow_origins": settings.cors_origin_list,
+    "allow_credentials": True,
+    "allow_methods": ["*"],
+    "allow_headers": ["*"],
+}
+if settings.debug:
+    _cors_kwargs["allow_origin_regex"] = (
+        r"https?://("
+        r"localhost|127\.0\.0\.1|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+        r")(:\d+)?"
+    )
+
+app.add_middleware(CORSMiddleware, **_cors_kwargs)
 
 prefix = settings.api_v1_prefix
 app.include_router(auth.router, prefix=f"{prefix}/auth", tags=["Auth"])
