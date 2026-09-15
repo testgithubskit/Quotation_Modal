@@ -44,7 +44,7 @@ def get_customer(
     return CustomerResponse.model_validate(customer_service.get(db, current_user, customer_id))
 
 
-@router.patch("/{customer_id}", response_model=CustomerResponse)
+@router.put("/{customer_id}", response_model=CustomerResponse)
 def update_customer(
     customer_id: UUID,
     payload: CustomerUpdate,

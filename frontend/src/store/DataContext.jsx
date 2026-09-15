@@ -55,7 +55,10 @@ function customKeysFrom(fields = []) {
 
 export function DataProvider({ children }) {
   const { isAuthenticated } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const [loadingActivities, setLoadingActivities] = useState(false);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const [activities, setActivities] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [reports, setReports] = useState([]);
@@ -92,34 +95,54 @@ export function DataProvider({ children }) {
     }));
   }, []);
 
-  const refresh = useCallback(async () => {
+  const clearAll = useCallback(() => {
+    setActivities([]);
+    setCustomers([]);
+    setReports([]);
+    setTemplates([]);
+    setSchema((s) => ({
+      ...s,
+      activityFields: DEFAULT_ACTIVITY_FIELDS,
+      customerFields: DEFAULT_CUSTOMER_FIELDS,
+    }));
+  }, []);
+
+  const refreshActivities = useCallback(async () => {
     if (!isAuthenticated) {
       setActivities([]);
-      setCustomers([]);
-      setReports([]);
-      setTemplates([]);
-      setSchema((s) => ({
-        ...s,
-        activityFields: DEFAULT_ACTIVITY_FIELDS,
-        customerFields: DEFAULT_CUSTOMER_FIELDS,
-      }));
       return;
     }
-
-    setLoading(true);
+    setLoadingActivities(true);
     try {
-      const [acts, custs, quots, tmpls, fields] = await Promise.all([
-        api.get('/activities', { params: listParams }).then((r) => r.data),
-        api.get('/customers', { params: listParams }).then((r) => r.data),
-        api.get('/quotations', { params: listParams }).then((r) => r.data),
-        api.get('/quotation-templates', { params: listParams }).then((r) => r.data),
-        api.get('/custom-fields', { params: listParams }).then((r) => r.data),
-      ]);
+      const data = await api.get('/activities', { params: listParams }).then((r) => r.data);
+      setActivities((data.items || []).map(toFeActivity));
+    } finally {
+      setLoadingActivities(false);
+    }
+  }, [isAuthenticated]);
 
-      applyCustomFieldDefs(fields.items || []);
-      setActivities((acts.items || []).map(toFeActivity));
-      setCustomers((custs.items || []).map(toFeCustomer));
+  const refreshCustomers = useCallback(async () => {
+    if (!isAuthenticated) {
+      setCustomers([]);
+      return;
+    }
+    setLoadingCustomers(true);
+    try {
+      const data = await api.get('/customers', { params: listParams }).then((r) => r.data);
+      setCustomers((data.items || []).map(toFeCustomer));
+    } finally {
+      setLoadingCustomers(false);
+    }
+  }, [isAuthenticated]);
 
+  const refreshReports = useCallback(async () => {
+    if (!isAuthenticated) {
+      setReports([]);
+      return;
+    }
+    setLoadingReports(true);
+    try {
+      const quots = await api.get('/quotations', { params: listParams }).then((r) => r.data);
       const listItems = quots.items || [];
       const detailed = await Promise.all(
         listItems.map(async (q) => {
@@ -132,93 +155,127 @@ export function DataProvider({ children }) {
         }),
       );
       setReports(detailed.filter(Boolean));
-      setTemplates((tmpls.items || []).map(toFeTemplate));
     } finally {
-      setLoading(false);
+      setLoadingReports(false);
     }
+  }, [isAuthenticated]);
+
+  const refreshTemplates = useCallback(async () => {
+    if (!isAuthenticated) {
+      setTemplates([]);
+      return;
+    }
+    setLoadingTemplates(true);
+    try {
+      const data = await api.get('/quotation-templates', { params: listParams }).then((r) => r.data);
+      setTemplates((data.items || []).map(toFeTemplate));
+    } finally {
+      setLoadingTemplates(false);
+    }
+  }, [isAuthenticated]);
+
+  const refreshCustomFields = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSchema((s) => ({
+        ...s,
+        activityFields: DEFAULT_ACTIVITY_FIELDS,
+        customerFields: DEFAULT_CUSTOMER_FIELDS,
+      }));
+      return;
+    }
+    const data = await api.get('/custom-fields', { params: listParams }).then((r) => r.data);
+    applyCustomFieldDefs(data.items || []);
   }, [isAuthenticated, applyCustomFieldDefs]);
 
   useEffect(() => {
-    refresh().catch(() => {});
-  }, [refresh]);
+    if (!isAuthenticated) clearAll();
+  }, [isAuthenticated, clearAll]);
 
   const updateSchema = (updater) => setSchema((s) => updater(s));
 
   const store = {
     data: { activities, customers, reports, templates, schema },
-    loading,
-    refresh,
+    loading: loadingActivities || loadingCustomers || loadingReports || loadingTemplates,
+    loadingActivities,
+    loadingCustomers,
+    loadingReports,
+    loadingTemplates,
+    refreshActivities,
+    refreshCustomers,
+    refreshReports,
+    refreshTemplates,
+    refreshCustomFields,
     getApiErrorMessage,
 
     addActivity: async (activity) => {
       await api.post('/activities', toBeActivity(activity, customKeysFrom(schema.activityFields)));
-      await refresh();
+      await refreshActivities();
     },
     addActivitiesBulk: async (rows) => {
       const keys = customKeysFrom(schema.activityFields);
       for (const row of rows) {
         await api.post('/activities', toBeActivity(row, keys));
       }
-      await refresh();
+      await refreshActivities();
     },
     updateActivity: async (id, patch) => {
       const current = activities.find((a) => a.id === id) || {};
-      await api.patch(
+      await api.put(
         `/activities/${id}`,
         toBeActivity({ ...current, ...patch }, customKeysFrom(schema.activityFields)),
       );
-      await refresh();
+      await refreshActivities();
     },
     deleteActivity: async (id) => {
       await api.delete(`/activities/${id}`);
-      await refresh();
+      await refreshActivities();
     },
 
     addCustomer: async (customer) => {
       await api.post('/customers', toBeCustomer(customer, customKeysFrom(schema.customerFields)));
-      await refresh();
+      await refreshCustomers();
     },
     updateCustomer: async (id, patch) => {
       const current = customers.find((c) => c.id === id) || {};
-      await api.patch(
+      await api.put(
         `/customers/${id}`,
         toBeCustomer({ ...current, ...patch }, customKeysFrom(schema.customerFields)),
       );
-      await refresh();
+      await refreshCustomers();
     },
     deleteCustomer: async (id) => {
       await api.delete(`/customers/${id}`);
-      await refresh();
+      await refreshCustomers();
     },
 
     addReport: async (report) => {
       const created = await api.post('/quotations', reportToQuotationPayload(report)).then((r) => r.data);
-      await refresh();
+      await refreshReports();
       return created.id;
     },
     updateReport: async (id, patch) => {
       const current = reports.find((r) => r.id === id) || {};
       const merged = { ...current, ...patch };
-      await api.patch(`/quotations/${id}`, reportToQuotationPayload(merged));
-      await refresh();
+      await api.put(`/quotations/${id}`, reportToQuotationPayload(merged));
+      await refreshReports();
     },
     deleteReport: async (id) => {
       await api.delete(`/quotations/${id}`);
-      await refresh();
+      await refreshReports();
     },
 
     addTemplate: async (template) => {
       await api.post('/quotation-templates', toBeTemplate(template));
-      await refresh();
+      await refreshTemplates();
     },
     updateTemplate: async (id, patch) => {
       const current = templates.find((t) => t.id === id) || {};
-      await api.patch(`/quotation-templates/${id}`, toBeTemplate({ ...current, ...patch }));
-      await refresh();
+      await api.put(`/quotation-templates/${id}`, toBeTemplate({ ...current, ...patch }));
+      await refreshTemplates();
     },
     deleteTemplate: async (id) => {
       await api.delete(`/quotation-templates/${id}`);
-      await refresh();
+      await refreshTemplates();
     },
 
     addActivityField: async (field) => {
@@ -232,12 +289,12 @@ export function DataProvider({ children }) {
         is_editable: true,
         display_order: schema.activityFields.length,
       });
-      await refresh();
+      await refreshCustomFields();
     },
     removeActivityField: async (key) => {
       const field = schema.activityFields.find((f) => f.key === key && !f.builtIn);
       if (field?.id) await api.delete(`/custom-fields/${field.id}`);
-      await refresh();
+      await refreshCustomFields();
     },
     addCustomerField: async (field) => {
       await api.post('/custom-fields', {
@@ -250,12 +307,12 @@ export function DataProvider({ children }) {
         is_editable: true,
         display_order: schema.customerFields.length,
       });
-      await refresh();
+      await refreshCustomFields();
     },
     removeCustomerField: async (key) => {
       const field = schema.customerFields.find((f) => f.key === key && !f.builtIn);
       if (field?.id) await api.delete(`/custom-fields/${field.id}`);
-      await refresh();
+      await refreshCustomFields();
     },
 
     addReportHeaderField: (field) => updateSchema((s) => ({

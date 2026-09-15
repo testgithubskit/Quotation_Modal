@@ -50,7 +50,7 @@ def get_custom_field(
     return CustomFieldDefinitionResponse.model_validate(custom_field_service.get(db, current_user, field_id))
 
 
-@router.patch("/{field_id}", response_model=CustomFieldDefinitionResponse)
+@router.put("/{field_id}", response_model=CustomFieldDefinitionResponse)
 def update_custom_field(
     field_id: UUID,
     payload: CustomFieldDefinitionUpdate,

@@ -7,19 +7,18 @@ import ReportDocument from '../../components/ReportDocument';
 
 export default function ReportView() {
   const { id } = useParams();
-  const { data, loading, refreshReports } = useData();
+  const { data, loadingReports, refreshReports, refreshTemplates } = useData();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!data.reports.some((r) => r.id === id)) {
-      refreshReports().catch(() => {});
-    }
-  }, [id, data.reports, refreshReports]);
+    refreshReports().catch(() => {});
+    refreshTemplates().catch(() => {});
+  }, [refreshReports, refreshTemplates]);
 
   const report = data.reports.find((r) => r.id === id);
   const template = report && (data.templates.find((t) => t.id === report.templateId) || data.templates[0]);
 
-  if (loading && !report) {
+  if (loadingReports && !report) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
         <Spin size="large" />

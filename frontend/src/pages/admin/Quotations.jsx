@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import TableToolbar from '../../components/TableToolbar';
-import { enhanceColumns, recordMatchesSearch } from '../../utils/tableHelpers';
+import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -32,6 +32,8 @@ export default function AdminQuotations() {
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const load = async (nextStatus = status) => {
     setLoading(true);
@@ -51,6 +53,10 @@ export default function AdminQuotations() {
     load();
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, status]);
+
   const filtered = useMemo(
     () => rows.filter((row) => recordMatchesSearch(row, search, [
       'quotation_number', 'status', 'subtotal', 'total', 'currency',
@@ -59,6 +65,7 @@ export default function AdminQuotations() {
   );
 
   const columns = useMemo(() => enhanceColumns([
+    serialNoColumn(page, pageSize),
     { title: 'Quotation No.', dataIndex: 'quotation_number', width: 150 },
     {
       title: 'Date',
@@ -103,7 +110,7 @@ export default function AdminQuotations() {
         </Button>
       ),
     },
-  ], { subtotal: 'number', total: 'number' }), [navigate]);
+  ], { subtotal: 'number', total: 'number' }), [navigate, page, pageSize]);
 
   return (
     <div>
@@ -132,7 +139,14 @@ export default function AdminQuotations() {
           loading={loading}
           columns={columns}
           dataSource={filtered}
-          pagination={{ pageSize: 10, showTotal: (t) => `${t} quotations` }}
+          pagination={tablePagination({
+            current: page,
+            pageSize,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          })}
         />
       </div>
     </div>

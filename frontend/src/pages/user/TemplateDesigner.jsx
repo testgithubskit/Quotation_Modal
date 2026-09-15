@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Typography, Button, List, Space, Tag, Input, Switch, ColorPicker, message, Popconfirm, Row, Col,
 } from 'antd';
@@ -37,12 +37,25 @@ function blankTemplate() {
 }
 
 export default function TemplateDesigner() {
-  const { data, addTemplate, updateTemplate, deleteTemplate } = useData();
+  const { data, refreshTemplates, addTemplate, updateTemplate, deleteTemplate } = useData();
   const navigate = useNavigate();
 
-  const [selectedId, setSelectedId] = useState(data.templates[0]?.id || null);
-  const [draft, setDraft] = useState(data.templates[0] || blankTemplate());
+  const [selectedId, setSelectedId] = useState(null);
+  const [draft, setDraft] = useState(blankTemplate());
   const [isNew, setIsNew] = useState(false);
+
+  useEffect(() => {
+    refreshTemplates()
+      .then(() => {})
+      .catch(() => {});
+  }, [refreshTemplates]);
+
+  useEffect(() => {
+    if (!selectedId && !isNew && data.templates[0]) {
+      setSelectedId(data.templates[0].id);
+      setDraft(data.templates[0]);
+    }
+  }, [data.templates, selectedId, isNew]);
 
   const selectTemplate = (t) => {
     setSelectedId(t.id);

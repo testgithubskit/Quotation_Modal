@@ -13,11 +13,19 @@ import {
   Typography,
   message,
 } from 'antd';
-import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, DeleteOutlined, ColumnHeightOutlined } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { useAuth } from '../../config/auth.jsx';
+import AddColumnModal from '../../components/AddColumnModal';
+import { DynamicFormField } from '../../components/DynamicFormField';
 import TableToolbar from '../../components/TableToolbar';
-import { enhanceColumns, recordMatchesSearch } from '../../utils/tableHelpers';
+import {
+  DEFAULT_USER_FIELDS,
+  customFieldToSchema,
+  formatFieldValue,
+  toBackendFieldType,
+} from '../../utils/fieldSchema';
+import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
 
 const ROLE_OPTIONS = [
   { value: 'SUPERVISOR', label: 'Supervisor' },
@@ -31,23 +39,60 @@ const ROLE_COLOR = {
   USER: 'cyan',
 };
 
+function flattenUser(user) {
+  if (!user) return user;
+  return { ...user, ...(user.custom_data || {}) };
+}
+
+function pickCustomData(values, customFields) {
+  const custom_data = {};
+  customFields.forEach((field) => {
+    const value = values?.[field.key];
+    if (value !== undefined && value !== null && value !== '') {
+      custom_data[field.key] = value;
+    }
+  });
+  return custom_data;
+}
+
 export default function AdminTeam() {
   const { user: me } = useAuth();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState([]);
+  const [userFields, setUserFields] = useState(DEFAULT_USER_FIELDS);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
+  const [columnsOpen, setColumnsOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
   const [form] = Form.useForm();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  const customFields = useMemo(() => userFields.filter((f) => !f.builtIn), [userFields]);
+  const searchKeys = useMemo(
+    () => ['full_name', 'email', 'role_name', 'phone', ...customFields.map((f) => f.key)],
+    [customFields],
+  );
+
+  const loadCustomFields = async () => {
+    const data = await api.get('/custom-fields', {
+      params: { page: 1, page_size: 100, entity_type: 'USER' },
+    }).then((r) => r.data);
+    const custom = (data.items || []).map(customFieldToSchema);
+    setUserFields([...DEFAULT_USER_FIELDS, ...custom]);
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const data = await api.get('/users', {
-        params: { page: 1, page_size: 100, sort_by: 'created_at', sort_order: 'desc' },
-      }).then((r) => r.data);
-      setUsers(data.items || []);
+      const [usersData] = await Promise.all([
+        api.get('/users', {
+          params: { page: 1, page_size: 100, sort_by: 'created_at', sort_order: 'desc' },
+        }).then((r) => r.data),
+        loadCustomFields().catch(() => setUserFields(DEFAULT_USER_FIELDS)),
+      ]);
+      setUsers((usersData.items || []).map(flattenUser));
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to load users'));
     } finally {
@@ -59,6 +104,10 @@ export default function AdminTeam() {
     load();
   }, []);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
@@ -68,14 +117,18 @@ export default function AdminTeam() {
 
   const openEdit = (record) => {
     setEditing(record);
-    form.setFieldsValue({
+    const values = {
       full_name: record.full_name,
       email: record.email,
       phone: record.phone,
       role_name: record.role_name,
       is_active: record.is_active,
       password: undefined,
+    };
+    customFields.forEach((field) => {
+      values[field.key] = record[field.key];
     });
+    form.setFieldsValue(values);
     setOpen(true);
   };
 
@@ -83,15 +136,17 @@ export default function AdminTeam() {
     const values = await form.validateFields();
     setSaving(true);
     try {
+      const custom_data = pickCustomData(values, customFields);
       if (editing) {
         const patch = {
           full_name: values.full_name,
           phone: values.phone || null,
           role_name: values.role_name,
           is_active: values.is_active,
+          custom_data,
         };
         if (values.password) patch.password = values.password;
-        await api.patch(`/users/${editing.id}`, patch);
+        await api.put(`/users/${editing.id}`, patch);
         message.success('User updated');
       } else {
         await api.post('/users', {
@@ -101,6 +156,7 @@ export default function AdminTeam() {
           phone: values.phone?.trim() || null,
           role_name: values.role_name,
           is_active: values.is_active !== false,
+          custom_data,
         });
         message.success('User created');
       }
@@ -123,14 +179,38 @@ export default function AdminTeam() {
     }
   };
 
+  const addUserField = async (field) => {
+    await api.post('/custom-fields', {
+      entity_type: 'USER',
+      field_key: field.key,
+      field_label: field.label,
+      field_type: toBackendFieldType(field.type),
+      is_required: false,
+      is_visible: true,
+      is_editable: true,
+      display_order: userFields.length,
+    });
+    await loadCustomFields();
+  };
+
+  const removeUserField = async (key) => {
+    const field = userFields.find((f) => f.key === key && !f.builtIn);
+    if (field?.id) await api.delete(`/custom-fields/${field.id}`);
+    await loadCustomFields();
+  };
+
   const filtered = useMemo(
-    () => users.filter((row) => recordMatchesSearch(row, search, [
-      'full_name', 'email', 'role_name', 'phone',
-    ])),
-    [users, search],
+    () => users.filter((row) => recordMatchesSearch(row, search, searchKeys)),
+    [users, search, searchKeys],
+  );
+
+  const fieldTypeByKey = useMemo(
+    () => Object.fromEntries(userFields.map((f) => [f.key, f.type])),
+    [userFields],
   );
 
   const columns = useMemo(() => enhanceColumns([
+    serialNoColumn(page, pageSize),
     { title: 'Name', dataIndex: 'full_name' },
     { title: 'Email', dataIndex: 'email' },
     {
@@ -158,6 +238,12 @@ export default function AdminTeam() {
       ],
       onFilter: (value, record) => record.is_active === value,
     },
+    ...customFields.map((field) => ({
+      title: field.label,
+      dataIndex: field.key,
+      ellipsis: field.type === 'textarea',
+      render: (v) => formatFieldValue(field, v),
+    })),
     {
       title: 'Actions',
       width: 110,
@@ -177,7 +263,7 @@ export default function AdminTeam() {
         );
       },
     },
-  ]), [me?.id]);
+  ], fieldTypeByKey), [me?.id, customFields, fieldTypeByKey, page, pageSize]);
 
   return (
     <div>
@@ -187,6 +273,11 @@ export default function AdminTeam() {
         searchPlaceholder="Search team by name, email, role…"
         onRefresh={load}
         refreshing={loading}
+        actions={(
+          <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
+            Add Column
+          </Button>
+        )}
         addButton={(
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
             Add member
@@ -205,7 +296,14 @@ export default function AdminTeam() {
           loading={loading}
           columns={columns}
           dataSource={filtered}
-          pagination={{ pageSize: 10, showTotal: (t) => `${t} members` }}
+          pagination={tablePagination({
+            current: page,
+            pageSize,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          })}
         />
       </div>
 
@@ -263,8 +361,34 @@ export default function AdminTeam() {
           <Form.Item name="is_active" label="Active" valuePropName="checked">
             <Switch />
           </Form.Item>
+          {customFields.map((field) => (
+            <DynamicFormField key={field.key} field={field} />
+          ))}
         </Form>
       </Modal>
+
+      <AddColumnModal
+        open={columnsOpen}
+        onClose={() => setColumnsOpen(false)}
+        title="Customize Team Columns"
+        fields={userFields}
+        onAdd={async (field) => {
+          try {
+            await addUserField(field);
+            message.success(`Column "${field.label}" added`);
+          } catch (error) {
+            message.error(getApiErrorMessage(error, 'Failed to add column'));
+          }
+        }}
+        onRemove={async (key) => {
+          try {
+            await removeUserField(key);
+            message.success('Column removed');
+          } catch (error) {
+            message.error(getApiErrorMessage(error, 'Failed to remove column'));
+          }
+        }}
+      />
     </div>
   );
 }

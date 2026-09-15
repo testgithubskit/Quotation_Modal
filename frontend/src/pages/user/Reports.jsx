@@ -1,15 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Table, Button, Space, Empty, Popconfirm, message } from 'antd';
 import { EyeOutlined, EditOutlined, DeleteOutlined, BgColorsOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../store/DataContext';
 import TableToolbar from '../../components/TableToolbar';
-import { enhanceColumns, recordMatchesSearch } from '../../utils/tableHelpers';
+import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
 
 export default function Reports() {
-  const { data, loading, refresh, deleteReport } = useData();
+  const { data, loadingReports, refreshReports, deleteReport } = useData();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    refreshReports().catch(() => {});
+  }, [refreshReports]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const total = (r) => (r.activities || []).reduce((sum, a) => {
     const rate = Number(a.unitRate ?? a.cost ?? 0);
@@ -45,6 +55,7 @@ export default function Reports() {
   );
 
   const columns = useMemo(() => enhanceColumns([
+    serialNoColumn(page, pageSize),
     { title: 'Report No.', dataIndex: 'reportNo', width: 130 },
     { title: 'Customer', dataIndex: 'customerLabel' },
     { title: 'Center', dataIndex: 'center' },
@@ -79,7 +90,7 @@ export default function Reports() {
         </Space>
       ),
     },
-  ], { totalAmount: 'number' }), [navigate, deleteReport]);
+  ], { totalAmount: 'number' }), [navigate, deleteReport, page, pageSize]);
 
   return (
     <div>
@@ -87,8 +98,8 @@ export default function Reports() {
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search reports by any field…"
-        onRefresh={() => refresh()}
-        refreshing={loading}
+        onRefresh={() => refreshReports()}
+        refreshing={loadingReports}
         actions={(
           <Button icon={<BgColorsOutlined />} onClick={() => navigate('/user/templates')}>
             Design Template
@@ -117,8 +128,15 @@ export default function Reports() {
             rowKey="id"
             columns={columns}
             dataSource={filtered}
-            loading={loading}
-            pagination={{ pageSize: 8, showTotal: (t) => `${t} reports` }}
+            loading={loadingReports}
+            pagination={tablePagination({
+              current: page,
+              pageSize,
+              onChange: (nextPage, nextSize) => {
+                setPage(nextPage);
+                setPageSize(nextSize);
+              },
+            })}
           />
         )}
       </div>

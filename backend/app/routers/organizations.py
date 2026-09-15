@@ -16,7 +16,7 @@ def get_my_organization(
     return OrganizationResponse.model_validate(organization_service.get(db, current_user.organization_id))
 
 
-@router.patch("/me", response_model=OrganizationResponse)
+@router.put("/me", response_model=OrganizationResponse)
 def update_my_organization(
     payload: OrganizationUpdate,
     db: DbSession,

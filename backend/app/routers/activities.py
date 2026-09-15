@@ -44,7 +44,7 @@ def get_activity(
     return ActivityResponse.model_validate(activity_service.get(db, current_user, activity_id))
 
 
-@router.patch("/{activity_id}", response_model=ActivityResponse)
+@router.put("/{activity_id}", response_model=ActivityResponse)
 def update_activity(
     activity_id: UUID,
     payload: ActivityUpdate,

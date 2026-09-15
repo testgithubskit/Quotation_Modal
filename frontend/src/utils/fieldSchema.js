@@ -13,6 +13,14 @@ export const DEFAULT_CUSTOMER_FIELDS = [
   { key: 'mobile', label: 'Mobile Number', type: 'text', builtIn: true },
 ];
 
+export const DEFAULT_USER_FIELDS = [
+  { key: 'full_name', label: 'Full Name', type: 'text', builtIn: true },
+  { key: 'email', label: 'Email', type: 'email', builtIn: true },
+  { key: 'role_name', label: 'Role', type: 'text', builtIn: true },
+  { key: 'phone', label: 'Phone', type: 'text', builtIn: true },
+  { key: 'is_active', label: 'Status', type: 'text', builtIn: true },
+];
+
 /** All header fields on Generate Report are custom — add via Add Field (e.g. Centre, Lab, Date). */
 export const DEFAULT_REPORT_HEADER_FIELDS = [];
 

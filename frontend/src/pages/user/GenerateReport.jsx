@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Typography, Form, Row, Col, Card, Button, Space,
   Input, InputNumber, Select, message,
@@ -34,12 +34,20 @@ function emptyItem() {
 export default function GenerateReport() {
   const {
     data, addReport,
+    refreshActivities, refreshCustomers, refreshTemplates, refreshCustomFields,
     addReportHeaderField, removeReportHeaderField,
     addReportCustomerField, removeReportCustomerField,
     addReportTermsField, removeReportTermsField,
   } = useData();
   const navigate = useNavigate();
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    refreshActivities().catch(() => {});
+    refreshCustomers().catch(() => {});
+    refreshTemplates().catch(() => {});
+    refreshCustomFields().catch(() => {});
+  }, [refreshActivities, refreshCustomers, refreshTemplates, refreshCustomFields]);
 
   const [items, setItems] = useState([emptyItem()]);
   const [activeKey, setActiveKey] = useState(items[0].key);

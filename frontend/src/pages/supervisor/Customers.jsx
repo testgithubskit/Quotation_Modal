@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Table, Button, Space, Modal, Form, message, Popconfirm } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, ColumnHeightOutlined } from '@ant-design/icons';
 import { useData } from '../../store/DataContext';
@@ -6,11 +6,11 @@ import AddColumnModal from '../../components/AddColumnModal';
 import TableToolbar from '../../components/TableToolbar';
 import { DynamicFormField } from '../../components/DynamicFormField';
 import { formatFieldValue } from '../../utils/fieldSchema';
-import { enhanceColumns, recordMatchesSearch } from '../../utils/tableHelpers';
+import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
 
 export default function Customers() {
   const {
-    data, loading, refresh,
+    data, loadingCustomers, refreshCustomers, refreshCustomFields,
     addCustomer, updateCustomer, deleteCustomer,
     addCustomerField, removeCustomerField,
   } = useData();
@@ -19,6 +19,17 @@ export default function Customers() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [form] = Form.useForm();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    refreshCustomers().catch(() => {});
+    refreshCustomFields().catch(() => {});
+  }, [refreshCustomers, refreshCustomFields]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const fieldDefs = data.schema.customerFields;
   const requiredKeys = ['name', 'company', 'address', 'email', 'mobile'];
@@ -63,7 +74,7 @@ export default function Customers() {
   );
 
   const columns = useMemo(() => enhanceColumns([
-    { title: 'Sl.No', width: 70, render: (_, __, i) => i + 1 },
+    serialNoColumn(page, pageSize),
     ...fieldDefs.map((field) => ({
       title: field.label,
       dataIndex: field.key,
@@ -93,7 +104,7 @@ export default function Customers() {
         </Space>
       ),
     },
-  ], fieldTypeByKey), [fieldDefs, fieldTypeByKey]);
+  ], fieldTypeByKey), [fieldDefs, fieldTypeByKey, page, pageSize]);
 
   return (
     <div>
@@ -101,8 +112,8 @@ export default function Customers() {
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search customers by any field…"
-        onRefresh={() => refresh()}
-        refreshing={loading}
+        onRefresh={() => refreshCustomers()}
+        refreshing={loadingCustomers}
         actions={(
           <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
             Add Column
@@ -120,8 +131,15 @@ export default function Customers() {
           rowKey="id"
           columns={columns}
           dataSource={filtered}
-          loading={loading}
-          pagination={{ pageSize: 8, showTotal: (t) => `${t} customers` }}
+          loading={loadingCustomers}
+          pagination={tablePagination({
+            current: page,
+            pageSize,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          })}
         />
       </div>
 

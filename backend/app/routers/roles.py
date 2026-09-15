@@ -44,7 +44,7 @@ def get_role(
     return _role_response(role_service.get(db, role_id))
 
 
-@router.patch("/{role_id}", response_model=RoleResponse)
+@router.put("/{role_id}", response_model=RoleResponse)
 def update_role(
     role_id: UUID,
     payload: RoleUpdate,

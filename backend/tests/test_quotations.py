@@ -52,7 +52,7 @@ def test_quotation_calculations_and_frozen_activity_price(client: TestClient) ->
     assert Decimal(str(body["total"])) == Decimal("203.00")
     assert Decimal(str(body["items"][0]["unit_price"])) == Decimal("100.00")
 
-    updated_activity = client.patch(
+    updated_activity = client.put(
         f"/api/v1/activities/{activity['id']}",
         headers=headers,
         json={"unit_price": "999.00"},

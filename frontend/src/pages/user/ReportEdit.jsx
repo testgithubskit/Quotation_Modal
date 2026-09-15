@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  Button, Space, Typography, Result, Select, ColorPicker, Tooltip, Divider, message,
+  Button, Space, Typography, Result, Select, ColorPicker, Tooltip, Divider, message, Spin,
 } from 'antd';
 import {
   ArrowLeftOutlined, SaveOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
@@ -19,14 +19,34 @@ const FONTS = [
 
 export default function ReportEdit() {
   const { id } = useParams();
-  const { data, updateReport } = useData();
+  const { data, loadingReports, refreshReports, refreshTemplates, updateReport } = useData();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    refreshReports().catch(() => {});
+    refreshTemplates().catch(() => {});
+  }, [refreshReports, refreshTemplates]);
 
   const report = data.reports.find((r) => r.id === id);
   const baseTemplate = report && (data.templates.find((t) => t.id === report.templateId) || data.templates[0]);
 
-  const [templateId, setTemplateId] = useState(report?.templateId || baseTemplate?.id);
-  const [overrides, setOverrides] = useState(report?.overrides || {});
+  const [templateId, setTemplateId] = useState(null);
+  const [overrides, setOverrides] = useState({});
+
+  useEffect(() => {
+    if (report) {
+      setTemplateId(report.templateId || baseTemplate?.id);
+      setOverrides(report.overrides || {});
+    }
+  }, [report?.id]);
+
+  if (loadingReports && !report) {
+    return (
+      <div style={{ padding: 48, textAlign: 'center' }}>
+        <Spin size="large" />
+      </div>
+    );
+  }
 
   if (!report) {
     return <Result status="404" title="Report not found" extra={<Button onClick={() => navigate('/user/reports')}>Back to Reports</Button>} />;

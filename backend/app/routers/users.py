@@ -55,7 +55,7 @@ def get_user(
     return _to_response(user_service.get(db, current_user, user_id))
 
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.put("/{user_id}", response_model=UserResponse)
 def update_user(
     user_id: UUID,
     payload: UserUpdate,

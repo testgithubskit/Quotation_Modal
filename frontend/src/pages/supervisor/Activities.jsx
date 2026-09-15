@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Table, Button, Typography, Space, Modal, Form, Input, InputNumber,
   Upload, message, Popconfirm, Tag,
@@ -12,14 +12,14 @@ import AddColumnModal from '../../components/AddColumnModal';
 import TableToolbar from '../../components/TableToolbar';
 import { DynamicFormField } from '../../components/DynamicFormField';
 import { formatFieldValue } from '../../utils/fieldSchema';
-import { enhanceColumns, recordMatchesSearch } from '../../utils/tableHelpers';
+import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
 import { mapRowsToActivities, parseSpreadsheetFile } from '../../utils/spreadsheet';
 
 const { Dragger } = Upload;
 
 export default function Activities() {
   const {
-    data, loading, refresh,
+    data, loadingActivities, refreshActivities, refreshCustomFields,
     addActivity, addActivitiesBulk, updateActivity, deleteActivity,
     addActivityField, removeActivityField,
   } = useData();
@@ -31,6 +31,17 @@ export default function Activities() {
   const [form] = Form.useForm();
   const [bulkRows, setBulkRows] = useState([]);
   const [parsing, setParsing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  useEffect(() => {
+    refreshActivities().catch(() => {});
+    refreshCustomFields().catch(() => {});
+  }, [refreshActivities, refreshCustomFields]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
 
   const fieldDefs = data.schema.activityFields;
   const searchKeys = useMemo(() => fieldDefs.map((f) => f.key), [fieldDefs]);
@@ -90,11 +101,7 @@ export default function Activities() {
   );
 
   const columns = useMemo(() => enhanceColumns([
-    {
-      title: 'Sl.No',
-      width: 70,
-      render: (_, __, i) => i + 1,
-    },
+    serialNoColumn(page, pageSize),
     ...fieldDefs.map((field) => ({
       title: field.label,
       dataIndex: field.key,
@@ -127,7 +134,7 @@ export default function Activities() {
         </Space>
       ),
     },
-  ], fieldTypeByKey), [fieldDefs, fieldTypeByKey]);
+  ], fieldTypeByKey), [fieldDefs, fieldTypeByKey, page, pageSize]);
 
   return (
     <div>
@@ -135,8 +142,8 @@ export default function Activities() {
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search activities by any field…"
-        onRefresh={() => refresh()}
-        refreshing={loading}
+        onRefresh={() => refreshActivities()}
+        refreshing={loadingActivities}
         actions={(
           <>
             <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
@@ -159,8 +166,15 @@ export default function Activities() {
           rowKey="id"
           columns={columns}
           dataSource={filtered}
-          loading={loading}
-          pagination={{ pageSize: 8, showTotal: (t) => `${t} activities` }}
+          loading={loadingActivities}
+          pagination={tablePagination({
+            current: page,
+            pageSize,
+            onChange: (nextPage, nextSize) => {
+              setPage(nextPage);
+              setPageSize(nextSize);
+            },
+          })}
         />
       </div>
 

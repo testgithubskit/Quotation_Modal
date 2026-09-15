@@ -44,7 +44,7 @@ def get_template(
     return QuotationTemplateResponse.model_validate(quotation_template_service.get(db, current_user, template_id))
 
 
-@router.patch("/{template_id}", response_model=QuotationTemplateResponse)
+@router.put("/{template_id}", response_model=QuotationTemplateResponse)
 def update_template(
     template_id: UUID,
     payload: QuotationTemplateUpdate,

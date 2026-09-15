@@ -60,7 +60,7 @@ def get_quotation(
     return QuotationResponse.model_validate(quotation_service.get(db, current_user, quotation_id))
 
 
-@router.patch("/{quotation_id}", response_model=QuotationResponse)
+@router.put("/{quotation_id}", response_model=QuotationResponse)
 def update_quotation(
     quotation_id: UUID,
     payload: QuotationUpdate,
