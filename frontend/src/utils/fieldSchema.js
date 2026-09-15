@@ -21,8 +21,11 @@ export const DEFAULT_USER_FIELDS = [
   { key: 'is_active', label: 'Status', type: 'text', builtIn: true },
 ];
 
-/** All header fields on Generate Report are custom — add via Add Field (e.g. Centre, Lab, Date). */
-export const DEFAULT_REPORT_HEADER_FIELDS = [];
+/** Built-in header fields on Generate Report; more can be added via Add Field. */
+export const DEFAULT_REPORT_HEADER_FIELDS = [
+  { key: 'reportNo', label: 'Report No', type: 'text', builtIn: true, required: true },
+  { key: 'date', label: 'Date', type: 'date', builtIn: true, required: true },
+];
 
 /** Extra customer fields on Generate Report — add via Add Column. */
 export const DEFAULT_REPORT_CUSTOMER_FIELDS = [];
@@ -32,7 +35,8 @@ export const DEFAULT_REPORT_TERMS_FIELDS = [
   { key: 'termsAndConditions', label: 'Terms and Conditions', type: 'textarea', builtIn: true },
 ];
 
-const LEGACY_REPORT_HEADER_KEYS = new Set(['centre', 'lab', 'enquiryNo', 'date']);
+/** Old built-ins that were removed from defaults (keep custom copies if user added them). */
+const LEGACY_REPORT_HEADER_KEYS = new Set(['centre', 'lab', 'enquiryNo']);
 
 export function slugifyFieldKey(label, existingKeys = []) {
   let base = label
@@ -105,8 +109,9 @@ export function mergeSchema(saved, defaults) {
 }
 
 export function normalizeReportHeaderFields(saved) {
+  const defaultKeys = new Set(DEFAULT_REPORT_HEADER_FIELDS.map((f) => f.key));
   return mergeSchema(saved, DEFAULT_REPORT_HEADER_FIELDS)
-    .filter((f) => !(f.builtIn && LEGACY_REPORT_HEADER_KEYS.has(f.key)));
+    .filter((f) => !(f.builtIn && LEGACY_REPORT_HEADER_KEYS.has(f.key) && !defaultKeys.has(f.key)));
 }
 
 export function formatFieldValue(field, value) {

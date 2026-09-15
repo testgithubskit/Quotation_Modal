@@ -321,7 +321,7 @@ export function DataProvider({ children }) {
     })),
     removeReportHeaderField: (key) => updateSchema((s) => ({
       ...s,
-      reportHeaderFields: s.reportHeaderFields.filter((f) => f.key !== key),
+      reportHeaderFields: s.reportHeaderFields.filter((f) => f.key !== key || f.builtIn),
     })),
     addReportCustomerField: (field) => updateSchema((s) => ({
       ...s,

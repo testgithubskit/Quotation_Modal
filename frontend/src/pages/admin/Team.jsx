@@ -26,6 +26,7 @@ import {
   toBackendFieldType,
 } from '../../utils/fieldSchema';
 import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
+import { useTableScrollY } from '../../hooks/useTableScrollY';
 
 const ROLE_OPTIONS = [
   { value: 'SUPERVISOR', label: 'Supervisor' },
@@ -68,6 +69,7 @@ export default function AdminTeam() {
   const [form] = Form.useForm();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const tableScroll = useTableScrollY();
 
   const customFields = useMemo(() => userFields.filter((f) => !f.builtIn), [userFields]);
   const searchKeys = useMemo(
@@ -266,36 +268,39 @@ export default function AdminTeam() {
   ], fieldTypeByKey), [me?.id, customFields, fieldTypeByKey, page, pageSize]);
 
   return (
-    <div>
-      <TableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search team by name, email, role…"
-        onRefresh={load}
-        refreshing={loading}
-        actions={(
-          <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
-            Add Column
-          </Button>
-        )}
-        addButton={(
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            Add member
-          </Button>
-        )}
-      />
-      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        {users.filter((u) => u.role_name === 'SUPERVISOR').length} supervisors ·{' '}
-        {users.filter((u) => u.role_name === 'USER').length} users ·{' '}
-        {users.filter((u) => u.role_name === 'ADMIN').length} admins
-      </Typography.Text>
+    <div className="table-page">
+      <div className="table-page-toolbar">
+        <TableToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search team by name, email, role…"
+          onRefresh={load}
+          refreshing={loading}
+          actions={(
+            <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
+              Add Column
+            </Button>
+          )}
+          addButton={(
+            <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+              Add member
+            </Button>
+          )}
+        />
+        <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
+          {users.filter((u) => u.role_name === 'SUPERVISOR').length} supervisors ·{' '}
+          {users.filter((u) => u.role_name === 'USER').length} users ·{' '}
+          {users.filter((u) => u.role_name === 'ADMIN').length} admins
+        </Typography.Text>
+      </div>
 
-      <div className="card-shell">
+      <div className="table-card" ref={tableScroll.containerRef}>
         <Table
           rowKey="id"
           loading={loading}
           columns={columns}
           dataSource={filtered}
+          scroll={{ x: 'max-content', y: tableScroll.scrollY }}
           pagination={tablePagination({
             current: page,
             pageSize,

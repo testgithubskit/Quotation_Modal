@@ -80,6 +80,16 @@ api.interceptors.response.use(
 
 export function getApiErrorMessage(error, fallback = 'Something went wrong') {
   const data = error?.response?.data;
+  if (data?.error?.detail && data.error.detail !== 'Request validation failed') {
+    return data.error.detail;
+  }
+  const fieldErrors = data?.error?.errors;
+  if (Array.isArray(fieldErrors) && fieldErrors.length) {
+    const first = fieldErrors[0];
+    const loc = Array.isArray(first.loc) ? first.loc.filter((p) => p !== 'body').join('.') : '';
+    const msg = first.msg || first.message || 'Invalid value';
+    return loc ? `${loc}: ${msg}` : msg;
+  }
   if (data?.error?.detail) return data.error.detail;
   const detail = data?.detail;
   if (typeof detail === 'string') return detail;

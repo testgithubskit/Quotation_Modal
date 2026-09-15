@@ -7,6 +7,7 @@ import TableToolbar from '../../components/TableToolbar';
 import { DynamicFormField } from '../../components/DynamicFormField';
 import { formatFieldValue } from '../../utils/fieldSchema';
 import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
+import { useTableScrollY } from '../../hooks/useTableScrollY';
 
 export default function Customers() {
   const {
@@ -21,6 +22,7 @@ export default function Customers() {
   const [form] = Form.useForm();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const tableScroll = useTableScrollY();
 
   useEffect(() => {
     refreshCustomers().catch(() => {});
@@ -107,31 +109,34 @@ export default function Customers() {
   ], fieldTypeByKey), [fieldDefs, fieldTypeByKey, page, pageSize]);
 
   return (
-    <div>
-      <TableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search customers by any field…"
-        onRefresh={() => refreshCustomers()}
-        refreshing={loadingCustomers}
-        actions={(
-          <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
-            Add Column
-          </Button>
-        )}
-        addButton={(
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-            Add Customer
-          </Button>
-        )}
-      />
+    <div className="table-page">
+      <div className="table-page-toolbar">
+        <TableToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search customers by any field…"
+          onRefresh={() => refreshCustomers()}
+          refreshing={loadingCustomers}
+          actions={(
+            <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
+              Add Column
+            </Button>
+          )}
+          addButton={(
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+              Add Customer
+            </Button>
+          )}
+        />
+      </div>
 
-      <div className="card-shell">
+      <div className="table-card" ref={tableScroll.containerRef}>
         <Table
           rowKey="id"
           columns={columns}
           dataSource={filtered}
           loading={loadingCustomers}
+          scroll={{ x: 'max-content', y: tableScroll.scrollY }}
           pagination={tablePagination({
             current: page,
             pageSize,

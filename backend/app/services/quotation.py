@@ -68,7 +68,11 @@ class QuotationService:
             raise ConflictError("Quotation number already exists")
 
         custom_data = validate_custom_data(
-            db, current_user.organization_id, CustomFieldEntity.QUOTATION, payload.custom_data
+            db,
+            current_user.organization_id,
+            CustomFieldEntity.QUOTATION,
+            payload.custom_data,
+            allow_unknown=True,
         )
         quotation = quotation_crud.create(
             db,
@@ -128,6 +132,7 @@ class QuotationService:
                 CustomFieldEntity.QUOTATION,
                 data["custom_data"],
                 partial=True,
+                allow_unknown=True,
             )
         quotation = quotation_crud.update(db, quotation, data)
         if items is not None:
@@ -232,6 +237,7 @@ class QuotationService:
                 current_user.organization_id,
                 CustomFieldEntity.QUOTATION_ITEM,
                 item.custom_data,
+                allow_unknown=True,
             )
             quotation_item_crud.create(
                 db,

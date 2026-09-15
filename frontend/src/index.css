@@ -12,6 +12,203 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Fixed header + sidebar; only main content area fills the viewport */
+.app-shell {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  flex-shrink: 0;
+  z-index: 20;
+}
+
+.app-shell-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-shell-sider {
+  overflow: auto;
+  height: 100%;
+}
+
+.app-shell-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  background: #F5F3EE;
+}
+
+.page-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-scroll-header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.page-scroll-card.ant-card {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-scroll-card > .ant-card-body {
+  flex: 1;
+}
+
+/* Report view / edit: toolbar fixed, beige canvas scrolls */
+.report-view-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 12px;
+}
+
+.report-view-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.report-edit-tools {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.report-edit-hint {
+  flex-shrink: 0;
+  display: block;
+  margin: 0;
+}
+
+.report-view-canvas {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #EFEBE1;
+  border-radius: 6px;
+  padding: 32px 0;
+}
+
+.report-view-canvas .report-page {
+  margin-bottom: 24px;
+}
+
+@media print {
+  .app-shell-header,
+  .app-shell-sider,
+  .report-view-toolbar,
+  .report-edit-tools,
+  .report-edit-hint {
+    display: none !important;
+  }
+
+  .app-shell,
+  .app-shell-body,
+  .app-shell-content,
+  .report-view-page,
+  .report-view-canvas {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+    padding: 0 !important;
+  }
+
+  @page {
+    margin: 12mm;
+  }
+}
+
+/* List pages: toolbar fixed, table body scrolls inside card */
+.table-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 16px;
+}
+
+.table-page-toolbar {
+  flex-shrink: 0;
+}
+
+.table-card {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #E4E0D8;
+  border-radius: 6px;
+  padding: 0;
+}
+
+.table-card .ant-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.table-card .ant-spin-nested-loading,
+.table-card .ant-spin-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card .ant-table {
+  flex: 1;
+  min-height: 0;
+}
+
+.table-card .ant-table-container {
+  max-height: 100%;
+}
+
+.table-card .ant-table-body {
+  overflow-y: auto !important;
+}
+
+.table-card .ant-table-thead > tr > th {
+  background: #F5F5F5 !important;
+}
+
+.table-card .ant-pagination {
+  margin: 12px 16px !important;
+  flex-shrink: 0;
+}
+
+
 .page-title {
   font-family: 'Source Serif 4', Georgia, serif;
   font-weight: 600;
@@ -129,6 +326,10 @@ body {
 /* Auth page */
 .auth-page {
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: auto;
   display: flex;
   align-items: center;
   justify-content: center;

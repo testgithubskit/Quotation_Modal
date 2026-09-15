@@ -44,6 +44,8 @@ class ResetPasswordRequest(BaseModel):
 class CurrentUserResponse(ORMModel):
     id: UUID
     organization_id: UUID
+    organization_name: Optional[str] = None
+    organization_address: Optional[str] = None
     role_id: UUID
     role_name: str
     email: EmailStr

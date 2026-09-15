@@ -3,20 +3,37 @@ import { Upload, Typography } from 'antd';
 import { PictureOutlined } from '@ant-design/icons';
 
 import { fieldLabelFromKey } from '../utils/fieldSchema';
+import { defaultReportTemplate } from '../utils/reportTemplate';
 
 const currency = (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
+
+function isAutoQuotationNumber(value) {
+  return /^QT-\d{4}-\d+$/i.test(String(value || '').trim());
+}
+
+/** Prefer user-entered report no; never show duplicate from customHeader. */
+export function resolveReportNo(report) {
+  if (!report) return '—';
+  const candidates = [
+    report.customHeader?.reportNo,
+    report.reportNo,
+  ].filter((v) => v != null && String(v).trim() !== '');
+  const manual = candidates.find((v) => !isAutoQuotationNumber(v));
+  return String(manual || candidates[0] || '—');
+}
 
 function headerEntries(report) {
   const entries = [];
   if (report.customHeader && Object.keys(report.customHeader).length > 0) {
     Object.entries(report.customHeader).forEach(([key, val]) => {
+      // reportNo + date are rendered in the fixed top row — skip duplicates
+      if (key === 'reportNo' || key === 'date') return;
       if (val != null && val !== '') entries.push({ key, label: fieldLabelFromKey(key), val });
     });
   } else {
     if (report.centre || report.center) entries.push({ key: 'centre', label: 'Centre', val: report.centre || report.center });
     if (report.lab) entries.push({ key: 'lab', label: 'Lab', val: report.lab });
     if (report.enquiryNo) entries.push({ key: 'enquiryNo', label: 'Enquiry No.', val: report.enquiryNo });
-    if (report.date) entries.push({ key: 'date', label: 'Date', val: report.date });
   }
   return entries;
 }
@@ -46,17 +63,26 @@ function Editable({ editable, value, onChange, style, placeholder }) {
   );
 }
 
-function customerLabel(c) {
+function customerNameOnly(c) {
   if (!c) return '—';
+  if (c.name) return c.name;
   if (c.details) return c.details.split('\n')[0] || '—';
-  if (c.name) return `${c.name}${c.company ? ` — ${c.company}` : ''}`;
   return '—';
 }
 
-export default function ReportDocument({ report, template, editable = false, onTemplateChange }) {
-  if (!report || !template) return null;
+function customerCompany(c) {
+  if (!c) return '';
+  if (c.company) return c.company;
+  // details is often "name\ncompany\naddress"
+  const lines = String(c.details || '').split('\n').map((s) => s.trim()).filter(Boolean);
+  if (lines.length >= 2) return lines[1];
+  return '';
+}
 
-  const t = template;
+export default function ReportDocument({ report, template, editable = false, onTemplateChange }) {
+  if (!report) return null;
+
+  const t = template || defaultReportTemplate();
   const patch = (field) => (val) => onTemplateChange && onTemplateChange({ [field]: val });
 
   const activities = report.activities || [];
@@ -74,6 +100,7 @@ export default function ReportDocument({ report, template, editable = false, onT
   const terms = report.terms || {};
   const notes = report.activityNotes || [];
   const metaFields = headerEntries(report);
+  const company = customerCompany(c);
 
   return (
     <div className="report-page" style={{ fontFamily: t.fontFamily || 'Inter, sans-serif' }}>
@@ -136,11 +163,11 @@ export default function ReportDocument({ report, template, editable = false, onT
         <tbody>
           <tr>
             <th style={{ width: '18%' }}>Report No.</th>
-            <td style={{ width: '32%' }}>{report.reportNo || '—'}</td>
+            <td style={{ width: '32%' }}>{resolveReportNo(report)}</td>
             <th style={{ width: '18%' }}>Date</th>
             <td style={{ width: '32%' }}>{report.date || report.customHeader?.date || '—'}</td>
           </tr>
-          {metaFields.filter((f) => f.key !== 'date').reduce((rows, field, i, arr) => {
+          {metaFields.reduce((rows, field, i, arr) => {
             if (i % 2 === 0) {
               const next = arr[i + 1];
               rows.push(
@@ -168,14 +195,14 @@ export default function ReportDocument({ report, template, editable = false, onT
           )}
           <tr>
             <th>Customer</th>
-            <td colSpan={3}>{customerLabel(c)}</td>
+            <td colSpan={3}>{customerNameOnly(c)}</td>
           </tr>
-          {c.contactPerson && (
+          {company ? (
             <tr>
-              <th>Contact Person</th>
-              <td colSpan={3}>{c.contactPerson}</td>
+              <th>Company Name</th>
+              <td colSpan={3}>{company}</td>
             </tr>
-          )}
+          ) : null}
           {(c.mobile || c.email) && (
             <tr>
               <th>Mobile / Email</th>

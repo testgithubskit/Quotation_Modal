@@ -6,6 +6,7 @@ import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import TableToolbar from '../../components/TableToolbar';
 import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
+import { useTableScrollY } from '../../hooks/useTableScrollY';
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
@@ -34,6 +35,7 @@ export default function AdminQuotations() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const tableScroll = useTableScrollY();
 
   const load = async (nextStatus = status) => {
     setLoading(true);
@@ -113,32 +115,35 @@ export default function AdminQuotations() {
   ], { subtotal: 'number', total: 'number' }), [navigate, page, pageSize]);
 
   return (
-    <div>
-      <TableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search quotations by any field…"
-        onRefresh={() => load()}
-        refreshing={loading}
-        actions={(
-          <Select
-            style={{ width: 160 }}
-            value={status}
-            options={STATUS_OPTIONS}
-            onChange={(v) => {
-              setStatus(v);
-              load(v);
-            }}
-          />
-        )}
-      />
+    <div className="table-page">
+      <div className="table-page-toolbar">
+        <TableToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search quotations by any field…"
+          onRefresh={() => load()}
+          refreshing={loading}
+          actions={(
+            <Select
+              style={{ width: 160 }}
+              value={status}
+              options={STATUS_OPTIONS}
+              onChange={(v) => {
+                setStatus(v);
+                load(v);
+              }}
+            />
+          )}
+        />
+      </div>
 
-      <div className="card-shell">
+      <div className="table-card" ref={tableScroll.containerRef}>
         <Table
           rowKey="id"
           loading={loading}
           columns={columns}
           dataSource={filtered}
+          scroll={{ x: 'max-content', y: tableScroll.scrollY }}
           pagination={tablePagination({
             current: page,
             pageSize,

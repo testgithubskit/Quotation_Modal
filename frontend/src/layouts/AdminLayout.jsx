@@ -25,20 +25,20 @@ export default function AdminLayout() {
   const selectedKey = PATH_KEY.find(([path]) => location.pathname.startsWith(path))?.[1] || 'dashboard';
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px' }}>
+    <Layout className="app-shell">
+      <Header className="app-shell-header">
         <Typography.Text className="brand-mark" style={{ color: '#fff', fontSize: 18 }}>
           Quotation Modal
         </Typography.Text>
         <UserProfileMenu />
       </Header>
-      <Layout>
-        <Sider width={220} theme="dark">
+      <Layout className="app-shell-body">
+        <Sider width={220} theme="dark" className="app-shell-sider">
           <Menu
             theme="dark"
             mode="inline"
             selectedKeys={[selectedKey]}
-            style={{ paddingTop: 12 }}
+            style={{ paddingTop: 12, height: '100%', borderInlineEnd: 0 }}
             items={[
               { key: 'dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
               { key: 'quotations', icon: <FilePdfOutlined />, label: 'Quotations' },
@@ -54,11 +54,9 @@ export default function AdminLayout() {
             }}
           />
         </Sider>
-        <Layout style={{ padding: 24 }}>
-          <Content>
-            <Outlet />
-          </Content>
-        </Layout>
+        <Content className="app-shell-content">
+          <Outlet />
+        </Content>
       </Layout>
     </Layout>
   );

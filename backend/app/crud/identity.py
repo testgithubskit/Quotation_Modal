@@ -25,7 +25,10 @@ class CRUDUser(CRUDBase[User]):
     def get_with_role(self, db: Session, user_id: UUID) -> User | None:
         return db.scalar(
             select(User)
-            .options(selectinload(User.role).selectinload(Role.role_permissions).selectinload(RolePermission.permission))
+            .options(
+                selectinload(User.organization),
+                selectinload(User.role).selectinload(Role.role_permissions).selectinload(RolePermission.permission),
+            )
             .where(User.id == user_id)
         )
 

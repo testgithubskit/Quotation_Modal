@@ -18,6 +18,7 @@ def validate_custom_data(
     custom_data: dict[str, Any] | None,
     *,
     partial: bool = False,
+    allow_unknown: bool = False,
 ) -> dict[str, Any]:
     definitions = custom_field_crud.list_for_entity(db, organization_id, entity_type)
     data = dict(custom_data or {})
@@ -25,7 +26,7 @@ def validate_custom_data(
 
     definition_keys = {item.field_key for item in definitions}
     unknown = set(data.keys()) - definition_keys
-    if unknown:
+    if unknown and not allow_unknown:
         raise AppError(f"Unknown custom fields: {', '.join(sorted(unknown))}", status_code=422, code="invalid_custom_field")
 
     for definition in definitions:
@@ -47,6 +48,12 @@ def validate_custom_data(
                 validated[definition.field_key] = None
             continue
         validated[definition.field_key] = _validate_value(definition, value)
+
+    # Keep free-form metadata (e.g. quotation reportDocument) when allowed.
+    if allow_unknown:
+        for key in unknown:
+            validated[key] = data[key]
+
     return validated
 
 

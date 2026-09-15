@@ -6,8 +6,10 @@ import {
   ArrowLeftOutlined, SaveOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../config/auth.jsx';
 import { useData } from '../../store/DataContext';
-import ReportDocument from '../../components/ReportDocument';
+import ReportDocument, { resolveReportNo } from '../../components/ReportDocument';
+import { resolveReportTemplate } from '../../utils/reportTemplate';
 
 const FONTS = [
   { value: 'Inter, sans-serif', label: 'Inter (Sans)' },
@@ -19,6 +21,7 @@ const FONTS = [
 
 export default function ReportEdit() {
   const { id } = useParams();
+  const { user } = useAuth();
   const { data, loadingReports, refreshReports, refreshTemplates, updateReport } = useData();
   const navigate = useNavigate();
 
@@ -28,14 +31,13 @@ export default function ReportEdit() {
   }, [refreshReports, refreshTemplates]);
 
   const report = data.reports.find((r) => r.id === id);
-  const baseTemplate = report && (data.templates.find((t) => t.id === report.templateId) || data.templates[0]);
 
   const [templateId, setTemplateId] = useState(null);
   const [overrides, setOverrides] = useState({});
 
   useEffect(() => {
     if (report) {
-      setTemplateId(report.templateId || baseTemplate?.id);
+      setTemplateId(report.templateId || null);
       setOverrides(report.overrides || {});
     }
   }, [report?.id]);
@@ -52,8 +54,12 @@ export default function ReportEdit() {
     return <Result status="404" title="Report not found" extra={<Button onClick={() => navigate('/user/reports')}>Back to Reports</Button>} />;
   }
 
-  const currentBase = data.templates.find((t) => t.id === templateId) || baseTemplate;
-  const effective = { ...currentBase, ...overrides };
+  const selectedBase = resolveReportTemplate(
+    data.templates,
+    { ...report, templateId, overrides: undefined },
+    user,
+  );
+  const effective = { ...selectedBase, ...overrides };
 
   const patch = (p) => setOverrides((o) => ({ ...o, ...p }));
 
@@ -68,25 +74,26 @@ export default function ReportEdit() {
   };
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+    <div className="report-view-page">
+      <div className="report-view-toolbar">
         <Space>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/user/reports/${report.id}/view`)}>Back</Button>
-          <Typography.Title level={4} style={{ margin: 0 }}>Editing {report.reportNo}</Typography.Title>
+          <Typography.Title level={4} style={{ margin: 0 }}>Editing {resolveReportNo(report)}</Typography.Title>
         </Space>
         <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>Save Report</Button>
       </div>
 
-      {/* Word-style toolbar */}
-      <div className="card-shell" style={{ padding: '10px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+      <div className="card-shell report-edit-tools">
         <Space size={6}>
           <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>Base template</Typography.Text>
           <Select
             size="small"
             style={{ width: 190 }}
             value={templateId}
+            placeholder="Default layout"
+            allowClear
             options={data.templates.map((t) => ({ value: t.id, label: t.name }))}
-            onChange={(v) => { setTemplateId(v); setOverrides({}); }}
+            onChange={(v) => { setTemplateId(v || null); setOverrides({}); }}
           />
         </Space>
 
@@ -120,11 +127,11 @@ export default function ReportEdit() {
         </Button>
       </div>
 
-      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        Click directly on the company name, address, title, or footer text below to edit them, just like a Word document. Click the logo box to upload an image.
+      <Typography.Text type="secondary" className="report-edit-hint">
+        Click directly on the company name, address, title, or footer text below to edit them. Click the logo box to upload an image.
       </Typography.Text>
 
-      <div style={{ background: '#EFEBE1', padding: '32px 0', borderRadius: 6 }}>
+      <div className="report-view-canvas">
         <ReportDocument report={report} template={effective} editable onTemplateChange={patch} />
       </div>
     </div>

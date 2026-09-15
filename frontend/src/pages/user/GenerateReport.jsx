@@ -5,6 +5,8 @@ import {
 } from 'antd';
 import { PlusOutlined, DeleteOutlined, SaveOutlined, ColumnHeightOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
+import { getApiErrorMessage } from '../../config/auth.js';
 import { useData } from '../../store/DataContext';
 import AddColumnModal from '../../components/AddColumnModal';
 import { DynamicFormField } from '../../components/DynamicFormField';
@@ -48,6 +50,12 @@ export default function GenerateReport() {
     refreshTemplates().catch(() => {});
     refreshCustomFields().catch(() => {});
   }, [refreshActivities, refreshCustomers, refreshTemplates, refreshCustomFields]);
+
+  useEffect(() => {
+    form.setFieldsValue({
+      date: form.getFieldValue('date') || dayjs(),
+    });
+  }, [form]);
 
   const [items, setItems] = useState([emptyItem()]);
   const [activeKey, setActiveKey] = useState(items[0].key);
@@ -106,6 +114,7 @@ export default function GenerateReport() {
     const mobile = customer.mobile ?? customer.mobileNumber ?? customer.phone ?? '';
     const patch = {
       contactPerson: customer.name,
+      companyName: customer.company || '',
       mobileNumber: mobile,
       emailId: customer.email,
     };
@@ -246,18 +255,23 @@ export default function GenerateReport() {
 
     try {
       const id = await addReport({
+        reportNo: headerData.reportNo,
         centre: headerData.centre,
         center: headerData.centre,
         lab: headerData.lab,
         enquiryNo: headerData.enquiryNo,
         date: headerData.date,
         customHeader: headerData,
-        customer: {
+          customer: {
           id: selectedCustomer.id,
           name: selectedCustomer.name,
-          company: selectedCustomer.company,
+          company: values.companyName || selectedCustomer.company,
           address: selectedCustomer.address,
-          details: [selectedCustomer.name, selectedCustomer.company, selectedCustomer.address].filter(Boolean).join('\n'),
+          details: [
+            selectedCustomer.name,
+            values.companyName || selectedCustomer.company,
+            selectedCustomer.address,
+          ].filter(Boolean).join('\n'),
           contactPerson: values.contactPerson,
           mobile: values.mobileNumber || selectedCustomer.mobile,
           email: values.emailId,
@@ -305,7 +319,7 @@ export default function GenerateReport() {
       message.success('Quotation submitted');
       navigate(`/user/reports/${id}/view`);
     } catch (error) {
-      message.error(error?.response?.data?.error?.detail || error?.message || 'Failed to submit quotation');
+      message.error(getApiErrorMessage(error, 'Failed to submit quotation'));
     }
   };
 
@@ -454,42 +468,34 @@ export default function GenerateReport() {
   };
 
   return (
-    <div>
-      <p className="section-eyebrow">User</p>
-      <Typography.Title level={3} className="page-title" style={{ margin: 0, marginBottom: 4 }}>
-        Generate Report
-      </Typography.Title>
-      <Typography.Text type="secondary">Fill in the quotation details below</Typography.Text>
+    <div className="page-scroll">
+      <div className="page-scroll-header">
+        <p className="section-eyebrow">User</p>
+        <Typography.Title level={3} className="page-title" style={{ margin: 0, marginBottom: 4 }}>
+          Generate Report
+        </Typography.Title>
+        <Typography.Text type="secondary">Fill in the quotation details below</Typography.Text>
+      </div>
 
-      <Card className="card-shell" style={{ marginTop: 20 }}>
-        <Form form={form} layout="vertical">
-          {headerFields.length > 0 && (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <Typography.Title level={5} className="form-section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
-                  Report Details
-                </Typography.Title>
-                <Button icon={<ColumnHeightOutlined />} onClick={() => setHeaderFieldsOpen(true)}>Add Field</Button>
-              </div>
-              <Row gutter={16}>
-                {headerFields.map((field) => (
-                  <Col xs={24} sm={12} md={6} key={field.key}>
-                    <DynamicFormField field={field} />
-                  </Col>
-                ))}
-              </Row>
-            </>
-          )}
-
-          {headerFields.length === 0 && (
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-              <Button icon={<ColumnHeightOutlined />} onClick={() => setHeaderFieldsOpen(true)}>Add Field</Button>
-            </div>
-          )}
+      <Card className="card-shell page-scroll-card" styles={{ body: { paddingBottom: 32 } }}>
+        <Form form={form} layout="vertical" initialValues={{ date: dayjs() }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Typography.Title level={5} className="form-section-title" style={{ margin: 0, border: 'none', padding: 0 }}>
+              Report Details
+            </Typography.Title>
+            <Button icon={<ColumnHeightOutlined />} onClick={() => setHeaderFieldsOpen(true)}>Add Field</Button>
+          </div>
+          <Row gutter={16}>
+            {headerFields.map((field) => (
+              <Col xs={24} sm={12} md={6} key={field.key}>
+                <DynamicFormField field={field} />
+              </Col>
+            ))}
+          </Row>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography.Title level={5} className="form-section-title">Customer Information</Typography.Title>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setCustomerFieldsOpen(true)}>Add Column</Button>
+            <Button icon={<ColumnHeightOutlined />} onClick={() => setCustomerFieldsOpen(true)}>Add Field</Button>
           </div>
 
           <Row gutter={16}>
@@ -509,6 +515,7 @@ export default function GenerateReport() {
                     if (id) handleCustomerSelect(id);
                     else form.setFieldsValue({
                       contactPerson: undefined,
+                      companyName: undefined,
                       mobileNumber: undefined,
                       emailId: undefined,
                       ...Object.fromEntries(reportCustomerFields.map((f) => [f.key, undefined])),
@@ -521,6 +528,11 @@ export default function GenerateReport() {
             <Col xs={24} sm={12} md={6}>
               <Form.Item name="contactPerson" label="Contact Person">
                 <Input placeholder="Enter contact person name" />
+              </Form.Item>
+            </Col>
+            <Col xs={24} sm={12} md={6}>
+              <Form.Item name="companyName" label="Company Name">
+                <Input placeholder="Enter company name" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={6}>
@@ -614,7 +626,7 @@ export default function GenerateReport() {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography.Title level={5} className="form-section-title">Terms &amp; Conditions</Typography.Title>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setTermsFieldsOpen(true)}>Add Column</Button>
+            <Button icon={<ColumnHeightOutlined />} onClick={() => setTermsFieldsOpen(true)}>Add Field</Button>
           </div>
 
           <Form.Item name="termsAndConditions" label="Terms and Conditions">

@@ -121,12 +121,14 @@ export function toBeTemplate(values) {
 }
 
 function lineFromActivity(a) {
-  return {
-    activity_id: a.activityId || null,
-    description: a.particulars || a.description || a.sampleActivity || 'Item',
-    quantity: Number(a.qty || 1),
+  const quantity = Math.max(Number(a.qty || 1), 0.0001);
+  const unit_price = Number(a.unitRate ?? a.cost ?? 0);
+  const description = String(a.particulars || a.description || a.sampleActivity || a.specification || 'Item').trim() || 'Item';
+  const line = {
+    description,
+    quantity,
     unit: a.unit || 'Nos',
-    unit_price: Number(a.unitRate ?? a.cost ?? 0),
+    unit_price,
     discount: 0,
     tax: 0,
     custom_data: {
@@ -139,6 +141,10 @@ function lineFromActivity(a) {
       parentKey: a.parentKey,
     },
   };
+  if (a.activityId) {
+    line.activity_id = a.activityId;
+  }
+  return line;
 }
 
 export function reportToQuotationPayload(report) {
@@ -150,14 +156,16 @@ export function reportToQuotationPayload(report) {
     });
   });
 
-  return {
+  const reportNo = String(report.reportNo || '').trim() || null;
+
+  const payload = {
     customer_id: report.customer?.id,
-    quotation_template_id: report.templateId || null,
     notes: report.subject || null,
     currency: 'INR',
     discount: 0,
     custom_data: {
       reportDocument: report,
+      reportNo,
       centre: report.centre || report.center,
       lab: report.lab,
       enquiryNo: report.enquiryNo,
@@ -165,16 +173,35 @@ export function reportToQuotationPayload(report) {
     },
     items,
   };
+  if (reportNo) {
+    payload.quotation_number = reportNo;
+  }
+  if (report.templateId) {
+    payload.quotation_template_id = report.templateId;
+  }
+  return payload;
 }
 
 export function quotationToFeReport(q) {
   if (!q) return null;
   const doc = q.custom_data?.reportDocument;
+  const fromDoc = doc?.reportNo || doc?.customHeader?.reportNo;
+  const fromCustom = q.custom_data?.reportNo;
+  const fromDb = q.quotation_number;
+  const isAuto = (v) => /^QT-\d{4}-\d+$/i.test(String(v || '').trim());
+  const candidates = [fromDoc, fromCustom, fromDb].filter((v) => v != null && String(v).trim() !== '');
+  const reportNo = candidates.find((v) => !isAuto(v)) || candidates[0] || null;
+
   if (doc) {
     return {
       ...doc,
       id: q.id,
-      reportNo: q.quotation_number || doc.reportNo,
+      reportNo,
+      customHeader: {
+        ...(doc.customHeader || {}),
+        // keep entered reportNo in header data but document view skips duplicating it
+        reportNo: reportNo || doc.customHeader?.reportNo,
+      },
       status: q.status,
       total: Number(q.total ?? 0),
     };
@@ -182,9 +209,9 @@ export function quotationToFeReport(q) {
 
   return {
     id: q.id,
-    reportNo: q.quotation_number,
+    reportNo,
     status: q.status,
-    date: q.quotation_date,
+    date: q.custom_data?.date || q.quotation_date,
     centre: q.custom_data?.centre,
     center: q.custom_data?.centre,
     lab: q.custom_data?.lab,

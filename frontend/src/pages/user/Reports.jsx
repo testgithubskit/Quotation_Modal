@@ -4,7 +4,9 @@ import { EyeOutlined, EditOutlined, DeleteOutlined, BgColorsOutlined, PlusOutlin
 import { useNavigate } from 'react-router-dom';
 import { useData } from '../../store/DataContext';
 import TableToolbar from '../../components/TableToolbar';
+import { resolveReportNo } from '../../components/ReportDocument';
 import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
+import { useTableScrollY } from '../../hooks/useTableScrollY';
 
 export default function Reports() {
   const { data, loadingReports, refreshReports, deleteReport } = useData();
@@ -12,6 +14,7 @@ export default function Reports() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const tableScroll = useTableScrollY();
 
   useEffect(() => {
     refreshReports().catch(() => {});
@@ -32,34 +35,58 @@ export default function Reports() {
 
   const customerName = (c) => {
     if (!c) return '—';
-    if (c.details) return c.details.split('\n')[0];
-    if (c.name) return `${c.name}${c.company ? ` — ${c.company}` : ''}`;
+    if (c.name) return c.name;
+    if (c.details) return c.details.split('\n')[0] || '—';
     return '—';
+  };
+
+  const customerCompany = (c) => {
+    if (!c) return '—';
+    if (c.company) return c.company;
+    const lines = String(c.details || '').split('\n').map((s) => s.trim()).filter(Boolean);
+    return lines[1] || '—';
   };
 
   const rows = useMemo(
     () => (data.reports || []).map((r) => ({
       ...r,
+      reportNo: resolveReportNo(r),
       customerLabel: customerName(r.customer),
+      companyLabel: customerCompany(r.customer),
       totalAmount: total(r),
-      center: r.center || r.centre || '',
     })),
     [data.reports],
   );
 
   const filtered = useMemo(
     () => rows.filter((row) => recordMatchesSearch(row, search, [
-      'reportNo', 'customerLabel', 'center', 'lab', 'date', 'totalAmount', 'status',
+      'reportNo', 'customerLabel', 'companyLabel', 'date', 'totalAmount', 'status',
     ])),
     [rows, search],
   );
 
   const columns = useMemo(() => enhanceColumns([
     serialNoColumn(page, pageSize),
-    { title: 'Report No.', dataIndex: 'reportNo', width: 130 },
-    { title: 'Customer', dataIndex: 'customerLabel' },
-    { title: 'Center', dataIndex: 'center' },
-    { title: 'Lab', dataIndex: 'lab' },
+    {
+      title: 'Report No.',
+      dataIndex: 'reportNo',
+      width: 130,
+      ellipsis: true,
+      render: (v) => v || '—',
+    },
+    {
+      title: 'Customer',
+      dataIndex: 'customerLabel',
+      width: 160,
+      ellipsis: true,
+    },
+    {
+      title: 'Company Name',
+      dataIndex: 'companyLabel',
+      width: 180,
+      ellipsis: true,
+      render: (v) => v || '—',
+    },
     { title: 'Date', dataIndex: 'date', width: 110 },
     {
       title: 'Total',
@@ -93,26 +120,28 @@ export default function Reports() {
   ], { totalAmount: 'number' }), [navigate, deleteReport, page, pageSize]);
 
   return (
-    <div>
-      <TableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search reports by any field…"
-        onRefresh={() => refreshReports()}
-        refreshing={loadingReports}
-        actions={(
-          <Button icon={<BgColorsOutlined />} onClick={() => navigate('/user/templates')}>
-            Design Template
-          </Button>
-        )}
-        addButton={(
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/user/generate')}>
-            Generate Report
-          </Button>
-        )}
-      />
+    <div className="table-page">
+      <div className="table-page-toolbar">
+        <TableToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search reports by any field…"
+          onRefresh={() => refreshReports()}
+          refreshing={loadingReports}
+          actions={(
+            <Button icon={<BgColorsOutlined />} onClick={() => navigate('/user/templates')}>
+              Design Template
+            </Button>
+          )}
+          addButton={(
+            <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/user/generate')}>
+              Generate Report
+            </Button>
+          )}
+        />
+      </div>
 
-      <div className="card-shell">
+      <div className="table-card" ref={tableScroll.containerRef}>
         {filtered.length === 0 ? (
           <div style={{ padding: 48 }}>
             <Empty description={search ? 'No reports match your search' : 'No reports generated yet'}>
@@ -129,6 +158,8 @@ export default function Reports() {
             columns={columns}
             dataSource={filtered}
             loading={loadingReports}
+            tableLayout="fixed"
+            scroll={{ y: tableScroll.scrollY }}
             pagination={tablePagination({
               current: page,
               pageSize,

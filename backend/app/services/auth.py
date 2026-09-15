@@ -141,9 +141,12 @@ class AuthService:
         db.commit()
 
     def current_user_payload(self, user: User) -> dict:
+        org = user.organization
         return {
             "id": user.id,
             "organization_id": user.organization_id,
+            "organization_name": org.name if org else None,
+            "organization_address": org.address if org else None,
             "role_id": user.role_id,
             "role_name": user.role.name if user.role else "",
             "email": user.email,

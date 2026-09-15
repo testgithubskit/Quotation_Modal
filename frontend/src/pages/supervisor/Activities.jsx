@@ -13,6 +13,7 @@ import TableToolbar from '../../components/TableToolbar';
 import { DynamicFormField } from '../../components/DynamicFormField';
 import { formatFieldValue } from '../../utils/fieldSchema';
 import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
+import { useTableScrollY } from '../../hooks/useTableScrollY';
 import { mapRowsToActivities, parseSpreadsheetFile } from '../../utils/spreadsheet';
 
 const { Dragger } = Upload;
@@ -33,6 +34,7 @@ export default function Activities() {
   const [parsing, setParsing] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const tableScroll = useTableScrollY();
 
   useEffect(() => {
     refreshActivities().catch(() => {});
@@ -137,36 +139,39 @@ export default function Activities() {
   ], fieldTypeByKey), [fieldDefs, fieldTypeByKey, page, pageSize]);
 
   return (
-    <div>
-      <TableToolbar
-        search={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search activities by any field…"
-        onRefresh={() => refreshActivities()}
-        refreshing={loadingActivities}
-        actions={(
-          <>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
-              Add Column
+    <div className="table-page">
+      <div className="table-page-toolbar">
+        <TableToolbar
+          search={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Search activities by any field…"
+          onRefresh={() => refreshActivities()}
+          refreshing={loadingActivities}
+          actions={(
+            <>
+              <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
+                Add Column
+              </Button>
+              <Button icon={<UploadOutlined />} onClick={() => setBulkOpen(true)}>
+                Upload Bulk
+              </Button>
+            </>
+          )}
+          addButton={(
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
+              Add Activity
             </Button>
-            <Button icon={<UploadOutlined />} onClick={() => setBulkOpen(true)}>
-              Upload Bulk
-            </Button>
-          </>
-        )}
-        addButton={(
-          <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
-            Add Activity
-          </Button>
-        )}
-      />
+          )}
+        />
+      </div>
 
-      <div className="card-shell">
+      <div className="table-card" ref={tableScroll.containerRef}>
         <Table
           rowKey="id"
           columns={columns}
           dataSource={filtered}
           loading={loadingActivities}
+          scroll={{ x: 'max-content', y: tableScroll.scrollY }}
           pagination={tablePagination({
             current: page,
             pageSize,
