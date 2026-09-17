@@ -11,6 +11,7 @@ import { useData } from '../../store/DataContext';
 import AddColumnModal from '../../components/AddColumnModal';
 import { DynamicFormField } from '../../components/DynamicFormField';
 import { serializeDynamicValues } from '../../components/DynamicFormField';
+import { templateHasRichLayout } from '../../utils/templatePlaceholders';
 
 const UNIT_OPTIONS = ['Nos', 'Set', 'Each', 'Parameter', 'Hour', 'Day'];
 const BUILT_IN_ITEM_KEYS = new Set(['code', 'specification', 'particulars', 'cost']);
@@ -313,7 +314,12 @@ export default function GenerateReport() {
               customFields: s.customFields || {},
             })),
         })),
-        templateId: data.templates.find((t) => t.isDefault)?.id || data.templates[0]?.id,
+        templateId: (
+          data.templates.find((t) => t.isDefault && templateHasRichLayout(t))
+          || data.templates.find((t) => templateHasRichLayout(t))
+          || data.templates.find((t) => t.isDefault)
+          || data.templates[0]
+        )?.id,
       });
 
       message.success('Quotation submitted');

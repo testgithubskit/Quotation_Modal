@@ -4,6 +4,7 @@ import { PictureOutlined } from '@ant-design/icons';
 
 import { fieldLabelFromKey } from '../utils/fieldSchema';
 import { defaultReportTemplate } from '../utils/reportTemplate';
+import { applyTemplatePlaceholders, templateHasRichLayout } from '../utils/templatePlaceholders';
 
 const currency = (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
@@ -101,63 +102,80 @@ export default function ReportDocument({ report, template, editable = false, onT
   const notes = report.activityNotes || [];
   const metaFields = headerEntries(report);
   const company = customerCompany(c);
+  const rich = templateHasRichLayout(t);
+  const headerHtml = rich
+    ? applyTemplatePlaceholders(t.headerHtml, report, t)
+    : '';
+  const footerHtml = rich
+    ? applyTemplatePlaceholders(t.footerHtml, report, t)
+    : '';
 
   return (
     <div className="report-page" style={{ fontFamily: t.fontFamily || 'Inter, sans-serif' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${t.primaryColor}`, paddingBottom: 16, marginBottom: 20 }}>
-        <div style={{ textAlign: headerAlign, flex: 1 }}>
-          <Editable
-            editable={editable}
-            value={t.companyName}
-            placeholder="Company Name"
-            onChange={patch('companyName')}
-            style={{ display: 'block', fontFamily: "'Source Serif 4', serif", fontSize: 22, fontWeight: 700, color: t.primaryColor }}
-          />
-          <Editable
-            editable={editable}
-            value={t.companyAddress}
-            placeholder="Company address"
-            onChange={patch('companyAddress')}
-            style={{ display: 'block', fontSize: 12.5, color: '#5B6169', marginTop: 4 }}
-          />
-        </div>
-        {t.showLogo !== false && (
-          editable ? (
-            <Upload
-              showUploadList={false}
-              accept="image/*"
-              beforeUpload={(file) => {
-                const reader = new FileReader();
-                reader.onload = (e) => onTemplateChange({ logo: e.target.result });
-                reader.readAsDataURL(file);
-                return false;
-              }}
-            >
-              <div style={{
-                width: 84, height: 84, border: '1px dashed #C9C3B4', borderRadius: 4,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                background: t.logo ? `url(${t.logo}) center/contain no-repeat` : '#FAF9F6', marginLeft: 16,
-              }}>
-                {!t.logo && <PictureOutlined style={{ fontSize: 20, color: '#B0A98F' }} />}
-              </div>
-            </Upload>
-          ) : (
-            t.logo ? (
-              <img src={t.logo} alt="logo" style={{ width: 84, height: 84, objectFit: 'contain', marginLeft: 16 }} />
-            ) : null
-          )
-        )}
-      </div>
-
-      <div style={{ textAlign: 'center', marginBottom: 20 }}>
-        <Editable
-          editable={editable}
-          value={t.headerText}
-          placeholder="QUOTATION REPORT"
-          onChange={patch('headerText')}
-          style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.04em', color: '#1C1E22' }}
+      {rich ? (
+        <div
+          className="template-editor-content report-rich-header"
+          style={{ marginBottom: 20 }}
+          dangerouslySetInnerHTML={{ __html: headerHtml }}
         />
-      </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: `2px solid ${t.primaryColor}`, paddingBottom: 16, marginBottom: 20 }}>
+            <div style={{ textAlign: headerAlign, flex: 1 }}>
+              <Editable
+                editable={editable}
+                value={t.companyName}
+                placeholder="Company Name"
+                onChange={patch('companyName')}
+                style={{ display: 'block', fontFamily: "'Source Serif 4', serif", fontSize: 22, fontWeight: 700, color: t.primaryColor }}
+              />
+              <Editable
+                editable={editable}
+                value={t.companyAddress}
+                placeholder="Company address"
+                onChange={patch('companyAddress')}
+                style={{ display: 'block', fontSize: 12.5, color: '#5B6169', marginTop: 4 }}
+              />
+            </div>
+            {t.showLogo !== false && (
+              editable ? (
+                <Upload
+                  showUploadList={false}
+                  accept="image/*"
+                  beforeUpload={(file) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => onTemplateChange({ logo: e.target.result });
+                    reader.readAsDataURL(file);
+                    return false;
+                  }}
+                >
+                  <div style={{
+                    width: 84, height: 84, border: '1px dashed #C9C3B4', borderRadius: 4,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    background: t.logo ? `url(${t.logo}) center/contain no-repeat` : '#FAF9F6', marginLeft: 16,
+                  }}>
+                    {!t.logo && <PictureOutlined style={{ fontSize: 20, color: '#B0A98F' }} />}
+                  </div>
+                </Upload>
+              ) : (
+                t.logo ? (
+                  <img src={t.logo} alt="logo" style={{ width: 84, height: 84, objectFit: 'contain', marginLeft: 16 }} />
+                ) : null
+              )
+            )}
+          </div>
+
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <Editable
+              editable={editable}
+              value={t.headerText}
+              placeholder="QUOTATION REPORT"
+              onChange={patch('headerText')}
+              style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.04em', color: '#1C1E22' }}
+            />
+          </div>
+        </>
+      )}
 
       <table className="report-table" style={{ marginBottom: 16 }}>
         <tbody>
@@ -329,13 +347,20 @@ export default function ReportDocument({ report, template, editable = false, onT
       )}
 
       <div style={{ marginTop: 32, paddingTop: 12, borderTop: '1px solid #E4E0D8' }}>
-        <Editable
-          editable={editable}
-          value={t.footerText}
-          placeholder="Footer note"
-          onChange={patch('footerText')}
-          style={{ fontSize: 11.5, color: '#8A8578', display: 'block', textAlign: 'center' }}
-        />
+        {rich ? (
+          <div
+            className="template-editor-content report-rich-footer"
+            dangerouslySetInnerHTML={{ __html: footerHtml }}
+          />
+        ) : (
+          <Editable
+            editable={editable}
+            value={t.footerText}
+            placeholder="Footer note"
+            onChange={patch('footerText')}
+            style={{ fontSize: 11.5, color: '#8A8578', display: 'block', textAlign: 'center' }}
+          />
+        )}
       </div>
     </div>
   );

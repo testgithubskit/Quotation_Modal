@@ -12,6 +12,7 @@ export default function UserLayout() {
   const { user } = useAuth();
 
   const selectedKey = location.pathname.includes('/generate') ? 'generate' : 'reports';
+  const flushContent = location.pathname.includes('/templates');
 
   const items = [];
   if (user?.role_name === 'ADMIN') {
@@ -48,8 +49,14 @@ export default function UserLayout() {
             }}
           />
         </Sider>
-        <Content className="app-shell-content">
-          <Outlet />
+        <Content className={`app-shell-content${flushContent ? ' app-shell-content--flush' : ''}`}>
+          {flushContent ? (
+            <div className="report-designer-root" style={{ height: '100%' }}>
+              <Outlet />
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </Content>
       </Layout>
     </Layout>

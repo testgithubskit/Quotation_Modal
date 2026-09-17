@@ -199,13 +199,32 @@ body {
   overflow-y: auto !important;
 }
 
+.table-card .ant-table-header {
+  overflow: hidden !important;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+
 .table-card .ant-table-thead > tr > th {
   background: #F5F5F5 !important;
+  position: sticky;
+  top: 0;
+  z-index: 3;
 }
 
 .table-card .ant-pagination {
   margin: 12px 16px !important;
   flex-shrink: 0;
+}
+
+/* Admin / content pages that need the whole page to scroll inside the shell */
+.page-scroll-y {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 

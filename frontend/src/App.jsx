@@ -22,7 +22,8 @@ import Reports from './pages/user/Reports';
 import GenerateReport from './pages/user/GenerateReport';
 import ReportView from './pages/user/ReportView';
 import ReportEdit from './pages/user/ReportEdit';
-import TemplateDesigner from './pages/user/TemplateDesigner';
+import ReportDesigner from './pages/reportDesigner/ReportDesigner.jsx';
+import ReportTemplateEditor from './pages/reportDesigner/ReportTemplateEditor.jsx';
 
 function AppRoutes() {
   const { user, booting, isAuthenticated } = useAuth();
@@ -67,7 +68,9 @@ function AppRoutes() {
           <Route path="reports/:id/view" element={<ReportView />} />
           <Route path="reports/:id/edit" element={<ReportEdit />} />
           <Route path="generate" element={<GenerateReport />} />
-          <Route path="templates" element={<TemplateDesigner />} />
+          <Route path="templates" element={<ReportDesigner />} />
+          <Route path="templates/new" element={<ReportTemplateEditor />} />
+          <Route path="templates/edit/:id" element={<ReportTemplateEditor />} />
           <Route index element={<Navigate to="reports" replace />} />
         </Route>
       </Route>

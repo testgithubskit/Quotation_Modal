@@ -164,7 +164,7 @@ export default function AdminAnalytics() {
   const hasQuotes = quotations.length > 0;
 
   return (
-    <div>
+    <div className="page-scroll-y">
       <div style={{ marginBottom: 20 }}>
         <p className="section-eyebrow">Admin</p>
         <Typography.Title level={3} className="page-title" style={{ margin: 0 }}>

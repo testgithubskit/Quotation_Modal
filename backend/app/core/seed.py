@@ -70,6 +70,7 @@ ROLE_PERMISSIONS: dict[str, set[str] | None] = {
         "quotations:create",
         "quotations:read",
         "quotations:update",
+        "quotations:delete",
         "quotation_templates:create",
         "quotation_templates:read",
         "quotation_templates:update",

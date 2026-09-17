@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Form, Input, Select, List, Button, Typography, Tag } from 'antd';
+import { Modal, Form, Input, Select, List, Button, Typography, Tag, Switch, Space } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { slugifyFieldKey } from '../utils/fieldSchema';
 
@@ -22,12 +22,16 @@ export default function AddColumnModal({
   const [form] = Form.useForm();
   const [adding, setAdding] = useState(false);
 
-  const customFields = fields.filter((f) => !f.builtIn);
-
   const handleAdd = async () => {
     const values = await form.validateFields();
     const key = slugifyFieldKey(values.label, fields.map((f) => f.key));
-    onAdd({ key, label: values.label.trim(), type: values.type, builtIn: false });
+    onAdd({
+      key,
+      label: values.label.trim(),
+      type: values.type,
+      required: Boolean(values.required),
+      builtIn: false,
+    });
     form.resetFields();
     setAdding(false);
   };
@@ -62,19 +66,30 @@ export default function AddColumnModal({
               />,
             ] : []}
           >
-            <span>{field.label}</span>
-            {field.builtIn ? <Tag>Built-in</Tag> : <Tag color="blue">Custom</Tag>}
+            <Space size={8} wrap>
+              <span>{field.label}</span>
+              {field.builtIn ? <Tag>Built-in</Tag> : <Tag color="blue">Custom</Tag>}
+              {field.required ? <Tag color="orange">Mandatory</Tag> : null}
+            </Space>
           </List.Item>
         )}
       />
 
       {adding ? (
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" initialValues={{ type: 'text', required: false }}>
           <Form.Item name="label" label="Column Label" rules={[{ required: true, message: 'Enter a column label' }]}>
             <Input placeholder="e.g. GST Code" />
           </Form.Item>
-          <Form.Item name="type" label="Field Type" initialValue="text" rules={[{ required: true }]}>
+          <Form.Item name="type" label="Field Type" rules={[{ required: true }]}>
             <Select options={FIELD_TYPES} />
+          </Form.Item>
+          <Form.Item
+            name="required"
+            label="Mandatory"
+            valuePropName="checked"
+            style={{ marginBottom: 16 }}
+          >
+            <Switch size="small" checkedChildren="Yes" unCheckedChildren="No" />
           </Form.Item>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <Button onClick={() => { setAdding(false); form.resetFields(); }}>Cancel</Button>

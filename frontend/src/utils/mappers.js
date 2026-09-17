@@ -98,13 +98,17 @@ export function toFeTemplate(t) {
     headerText: data.headerText || 'QUOTATION REPORT',
     footerText: data.footerText || '',
     showLogo: data.showLogo !== false,
+    headerHtml: data.headerHtml || data.header_html || '',
+    footerHtml: data.footerHtml || data.footer_html || '',
+    pageSettings: data.pageSettings || null,
+    fontFamily: data.pageSettings?.fontFamily || data.fontFamily || undefined,
   };
 }
 
 export function toBeTemplate(values) {
   return {
     name: values.name,
-    description: values.description || null,
+    description: values.description || (values.pageSettings ? JSON.stringify(values.pageSettings) : null),
     is_default: Boolean(values.isDefault),
     is_standard: Boolean(values.isStandard),
     template_data: {
@@ -115,6 +119,9 @@ export function toBeTemplate(values) {
       headerText: values.headerText || 'QUOTATION REPORT',
       footerText: values.footerText || '',
       showLogo: values.showLogo !== false,
+      headerHtml: values.headerHtml || '',
+      footerHtml: values.footerHtml || '',
+      pageSettings: values.pageSettings || null,
     },
     custom_data: values.custom_data || {},
   };

@@ -1,3 +1,5 @@
+import { templateHasRichLayout } from './templatePlaceholders';
+
 /** Fallback template when org has not created any quotation templates yet. */
 export function defaultReportTemplate(organization = null) {
   return {
@@ -13,6 +15,8 @@ export function defaultReportTemplate(organization = null) {
     align: 'left',
     fontFamily: 'Inter, sans-serif',
     isDefault: true,
+    headerHtml: '',
+    footerHtml: '',
   };
 }
 
@@ -26,13 +30,36 @@ function isPlaceholderAddress(value) {
   return !v || v === 'company address, city, state' || v === 'company address';
 }
 
+function pickBaseTemplate(templates = [], report) {
+  const list = templates || [];
+  if (report?.templateId) {
+    const byId = list.find((t) => t.id === report.templateId);
+    if (byId) return byId;
+  }
+
+  const richDefaults = list.filter((t) => templateHasRichLayout(t));
+  const markedDefault = list.find((t) => t.isDefault);
+  if (markedDefault && templateHasRichLayout(markedDefault)) return markedDefault;
+  if (richDefaults.length === 1) return richDefaults[0];
+  if (markedDefault) return markedDefault;
+  if (richDefaults[0]) return richDefaults[0];
+  return list[0] || null;
+}
+
 /** Merge saved/default template with registered organization details. */
 export function resolveReportTemplate(templates = [], report, organization = null) {
-  const list = templates || [];
-  const byId = report?.templateId ? list.find((t) => t.id === report.templateId) : null;
-  const fallback = list.find((t) => t.isDefault) || list[0] || defaultReportTemplate(organization);
-  let base = byId || fallback;
-  if (report?.overrides) base = { ...base, ...report.overrides };
+  const picked = pickBaseTemplate(templates, report);
+  let base = picked || defaultReportTemplate(organization);
+  if (report?.overrides) {
+    // Keep designed HTML unless override explicitly sets it
+    const { headerHtml, footerHtml, ...rest } = report.overrides;
+    base = {
+      ...base,
+      ...rest,
+      headerHtml: headerHtml !== undefined ? headerHtml : base.headerHtml,
+      footerHtml: footerHtml !== undefined ? footerHtml : base.footerHtml,
+    };
+  }
 
   const orgName = organization?.organization_name || organization?.name || '';
   const orgAddress = organization?.organization_address || organization?.address || '';

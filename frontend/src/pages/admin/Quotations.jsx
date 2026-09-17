@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Select, Table, Tag, message } from 'antd';
+import { Button, Select, Table, message } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -18,32 +18,50 @@ const STATUS_OPTIONS = [
   { value: 'CANCELLED', label: 'Cancelled' },
 ];
 
-const STATUS_COLOR = {
-  DRAFT: 'default',
-  SENT: 'processing',
-  ACCEPTED: 'success',
-  REJECTED: 'error',
-  EXPIRED: 'warning',
-  CANCELLED: 'default',
-};
+function customerName(c) {
+  if (!c) return '—';
+  return c.name || '—';
+}
+
+function customerCompany(c) {
+  if (!c) return '—';
+  return c.notes || c.company || '—';
+}
 
 export default function AdminQuotations() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [rows, setRows] = useState([]);
+  const [customersById, setCustomersById] = useState({});
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const tableScroll = useTableScrollY();
 
   const load = async (nextStatus = status) => {
     setLoading(true);
     try {
       const params = { page: 1, page_size: 100, sort_by: 'created_at', sort_order: 'desc' };
       if (nextStatus) params.status = nextStatus;
-      const data = await api.get('/quotations', { params }).then((r) => r.data);
-      setRows(data.items || []);
+      const [data, customers] = await Promise.all([
+        api.get('/quotations', { params }).then((r) => r.data),
+        api.get('/customers', { params: { page: 1, page_size: 100 } }).then((r) => r.data),
+      ]);
+      const map = {};
+      (customers.items || []).forEach((cust) => {
+        map[cust.id] = cust;
+      });
+      setCustomersById(map);
+      setRows(
+        (data.items || []).map((q) => {
+          const cust = map[q.customer_id];
+          return {
+            ...q,
+            customer_name: customerName(cust),
+            company_name: customerCompany(cust),
+          };
+        }),
+      );
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to load quotations'));
     } finally {
@@ -61,14 +79,16 @@ export default function AdminQuotations() {
 
   const filtered = useMemo(
     () => rows.filter((row) => recordMatchesSearch(row, search, [
-      'quotation_number', 'status', 'subtotal', 'total', 'currency',
+      'quotation_number', 'customer_name', 'company_name', 'subtotal', 'total', 'currency',
     ])),
     [rows, search],
   );
 
+  const tableScroll = useTableScrollY(72, [pageSize, filtered.length]);
+
   const columns = useMemo(() => enhanceColumns([
     serialNoColumn(page, pageSize),
-    { title: 'Quotation No.', dataIndex: 'quotation_number', width: 150 },
+    { title: 'Quotation No.', dataIndex: 'quotation_number', width: 150, ellipsis: true },
     {
       title: 'Date',
       dataIndex: 'quotation_date',
@@ -76,22 +96,18 @@ export default function AdminQuotations() {
       render: (v) => (v ? dayjs(v).format('DD MMM YYYY') : '—'),
     },
     {
-      title: 'Validity',
-      dataIndex: 'validity_date',
-      width: 130,
-      render: (v) => (v ? dayjs(v).format('DD MMM YYYY') : '—'),
+      title: 'Customer',
+      dataIndex: 'customer_name',
+      width: 160,
+      ellipsis: true,
+      render: (v) => v || '—',
     },
     {
-      title: 'Status',
-      dataIndex: 'status',
-      width: 120,
-      render: (s) => <Tag color={STATUS_COLOR[s] || 'default'}>{s}</Tag>,
-    },
-    {
-      title: 'Subtotal',
-      dataIndex: 'subtotal',
-      width: 120,
-      render: (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`,
+      title: 'Company Name',
+      dataIndex: 'company_name',
+      width: 180,
+      ellipsis: true,
+      render: (v) => v || '—',
     },
     {
       title: 'Total',
@@ -144,6 +160,7 @@ export default function AdminQuotations() {
           columns={columns}
           dataSource={filtered}
           scroll={{ x: 'max-content', y: tableScroll.scrollY }}
+          sticky
           pagination={tablePagination({
             current: page,
             pageSize,

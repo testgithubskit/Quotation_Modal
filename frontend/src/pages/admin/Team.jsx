@@ -69,7 +69,6 @@ export default function AdminTeam() {
   const [form] = Form.useForm();
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const tableScroll = useTableScrollY();
 
   const customFields = useMemo(() => userFields.filter((f) => !f.builtIn), [userFields]);
   const searchKeys = useMemo(
@@ -187,7 +186,7 @@ export default function AdminTeam() {
       field_key: field.key,
       field_label: field.label,
       field_type: toBackendFieldType(field.type),
-      is_required: false,
+      is_required: Boolean(field.required),
       is_visible: true,
       is_editable: true,
       display_order: userFields.length,
@@ -205,6 +204,8 @@ export default function AdminTeam() {
     () => users.filter((row) => recordMatchesSearch(row, search, searchKeys)),
     [users, search, searchKeys],
   );
+
+  const tableScroll = useTableScrollY(72, [pageSize, filtered.length, customFields.length]);
 
   const fieldTypeByKey = useMemo(
     () => Object.fromEntries(userFields.map((f) => [f.key, f.type])),
@@ -226,19 +227,6 @@ export default function AdminTeam() {
       dataIndex: 'phone',
       width: 140,
       render: (v) => v || '—',
-    },
-    {
-      title: 'Status',
-      dataIndex: 'is_active',
-      width: 100,
-      render: (active) => (
-        <Tag color={active ? 'success' : 'default'}>{active ? 'Active' : 'Inactive'}</Tag>
-      ),
-      filters: [
-        { text: 'Active', value: true },
-        { text: 'Inactive', value: false },
-      ],
-      onFilter: (value, record) => record.is_active === value,
     },
     ...customFields.map((field) => ({
       title: field.label,
@@ -301,6 +289,7 @@ export default function AdminTeam() {
           columns={columns}
           dataSource={filtered}
           scroll={{ x: 'max-content', y: tableScroll.scrollY }}
+          sticky
           pagination={tablePagination({
             current: page,
             pageSize,

@@ -30,7 +30,7 @@ export default function UserProfileMenu() {
   );
 
   return (
-    <Dropdown dropdownRender={() => dropdownContent} trigger={['click']} placement="bottomRight">
+    <Dropdown popupRender={() => dropdownContent} trigger={['click']} placement="bottomRight">
       <div className="profile-trigger">
         <Avatar size={36} style={{ backgroundColor: '#B8863A', flexShrink: 0 }}>
           {displayName[0]?.toUpperCase()}
