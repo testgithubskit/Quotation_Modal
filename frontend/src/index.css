@@ -774,4 +774,63 @@ body {
   margin-left: auto;
 }
 
+/* Bulk extract review (Activities upload) */
+.bulk-review {
+  display: flex;
+  flex-direction: column;
+  min-height: 560px;
+  max-height: min(86vh, 760px);
+}
+
+.bulk-review-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 12px;
+  border-bottom: 1px solid #E4E0D8;
+  flex-shrink: 0;
+}
+
+.bulk-review-table {
+  flex: 1;
+  min-height: 0;
+  padding: 0 8px;
+  background: #F3F7FB;
+}
+
+.bulk-review-table .ant-table {
+  background: transparent;
+}
+
+.bulk-review-table .ant-table-thead > tr > th {
+  background: #EEF1F5 !important;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: #5B6169;
+}
+
+.bulk-review-table .ant-table-tbody > tr.bulk-review-row-selected > td {
+  background: #E8F1FB;
+}
+
+.bulk-review-table .ant-table-tbody > tr:hover > td {
+  background: #DCEAF8 !important;
+}
+
+.bulk-review-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  border-top: 1px solid #E4E0D8;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.bulk-review-modal .ant-modal-content {
+  overflow: hidden;
+}
+
 

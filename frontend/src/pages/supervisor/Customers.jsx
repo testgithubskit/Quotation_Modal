@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Table, Button, Space, Modal, Form, message, Popconfirm } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, ColumnHeightOutlined } from '@ant-design/icons';
+import { Table, Button, Space, Modal, Form, message, Popconfirm, Dropdown } from 'antd';
+import {
+  PlusOutlined, DeleteOutlined, EditOutlined, ColumnHeightOutlined,
+  DownloadOutlined, FileExcelOutlined, FilePdfOutlined,
+} from '@ant-design/icons';
 import { useData } from '../../store/DataContext';
 import AddColumnModal from '../../components/AddColumnModal';
 import TableToolbar from '../../components/TableToolbar';
@@ -8,6 +11,7 @@ import { DynamicFormField } from '../../components/DynamicFormField';
 import { formatFieldValue } from '../../utils/fieldSchema';
 import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } from '../../utils/tableHelpers';
 import { useTableScrollY } from '../../hooks/useTableScrollY';
+import { downloadTableExcel, downloadTablePdf } from '../../utils/tableExport';
 
 export default function Customers() {
   const {
@@ -75,6 +79,33 @@ export default function Customers() {
     [fieldDefs],
   );
 
+  const handleDownload = ({ key }) => {
+    const rows = filtered;
+    if (!rows.length) {
+      message.warning('No customers to download');
+      return;
+    }
+    try {
+      if (key === 'excel') {
+        downloadTableExcel({
+          rows,
+          fieldDefs,
+          fileName: `customers-${new Date().toISOString().slice(0, 10)}`,
+        });
+        message.success('Excel downloaded');
+      } else if (key === 'pdf') {
+        downloadTablePdf({
+          rows,
+          fieldDefs,
+          title: 'Customers',
+          fileName: `customers-${new Date().toISOString().slice(0, 10)}`,
+        });
+      }
+    } catch (error) {
+      message.error(error?.message || 'Download failed');
+    }
+  };
+
   const columns = useMemo(() => enhanceColumns([
     serialNoColumn(page, pageSize),
     ...fieldDefs.map((field) => ({
@@ -118,9 +149,22 @@ export default function Customers() {
           onRefresh={() => refreshCustomers()}
           refreshing={loadingCustomers}
           actions={(
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
-              Add Column
-            </Button>
+            <>
+              <Dropdown
+                menu={{
+                  items: [
+                    { key: 'excel', icon: <FileExcelOutlined />, label: 'Download Excel' },
+                    { key: 'pdf', icon: <FilePdfOutlined />, label: 'Download PDF' },
+                  ],
+                  onClick: handleDownload,
+                }}
+              >
+                <Button icon={<DownloadOutlined />}>Download</Button>
+              </Dropdown>
+              <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnsOpen(true)}>
+                Add Column
+              </Button>
+            </>
           )}
           addButton={(
             <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>
