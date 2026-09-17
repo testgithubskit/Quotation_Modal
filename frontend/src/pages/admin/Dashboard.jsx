@@ -68,11 +68,11 @@ export default function AdminDashboard() {
   }, []);
 
   const stats = useMemo(() => {
-    const supervisors = users.filter((u) => u.role_name === 'SUPERVISOR').length;
     const teamUsers = users.filter((u) => u.role_name === 'USER').length;
+    const admins = users.filter((u) => u.role_name === 'ADMIN').length;
     const accepted = quotations.filter((q) => q.status === 'ACCEPTED').length;
     const totalValue = quotations.reduce((sum, q) => sum + Number(q.total || 0), 0);
-    return { supervisors, teamUsers, accepted, totalValue, quoteCount: quotations.length };
+    return { teamUsers, admins, accepted, totalValue, quoteCount: quotations.length };
   }, [users, quotations]);
 
   const recent = useMemo(
@@ -162,7 +162,7 @@ export default function AdminDashboard() {
           <StatCard
             label="Team"
             value={users.length}
-            hint={`${stats.supervisors} supervisors · ${stats.teamUsers} users`}
+            hint={`${stats.admins} admins · ${stats.teamUsers} users`}
             accent={palette.success}
           />
         </Col>
@@ -170,7 +170,7 @@ export default function AdminDashboard() {
           <StatCard
             label="Customers"
             value={customerCount}
-            hint="In master data"
+            hint="Customers master"
             accent="#5B7C99"
           />
         </Col>

@@ -12,10 +12,14 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Fixed header + sidebar; only main content area fills the viewport */
+/* Fixed full-height shell; sidebar + content fill the viewport */
 .app-shell {
   height: 100vh;
   overflow: hidden;
+}
+
+.app-shell--sidebar {
+  flex-direction: row;
 }
 
 .app-shell-header {
@@ -36,6 +40,196 @@ body {
 .app-shell-sider {
   overflow: auto;
   height: 100%;
+}
+
+/* Dark PROMETRIX-style sidebar */
+.app-sidebar.ant-layout-sider {
+  background: #141414 !important;
+  border-right: 1px solid #2a2a2a;
+  flex-shrink: 0;
+}
+
+.app-sidebar .ant-layout-sider-children {
+  height: 100%;
+}
+
+.app-sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.app-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px 16px;
+  flex-shrink: 0;
+}
+
+.app-sidebar-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2b6cb0, #16324F);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.app-sidebar-brand-name {
+  color: #fff;
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.app-sidebar-nav {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px 8px 12px;
+}
+
+.app-sidebar-menu.ant-menu-dark {
+  background: transparent !important;
+  border-inline-end: none !important;
+}
+
+.app-sidebar-menu.ant-menu-dark .ant-menu-item,
+.app-sidebar-menu.ant-menu-dark .ant-menu-item-group-title {
+  color: rgba(255, 255, 255, 0.78);
+  margin-inline: 0;
+  width: 100%;
+  border-radius: 6px;
+  height: 42px;
+  line-height: 42px;
+}
+
+.app-sidebar-menu.ant-menu-dark .ant-menu-item .anticon {
+  font-size: 16px;
+}
+
+.app-sidebar-menu.ant-menu-dark .ant-menu-item:hover {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.app-sidebar-menu.ant-menu-dark .ant-menu-item-selected {
+  color: #fff !important;
+  background: #1E5A93 !important;
+  font-weight: 600;
+}
+
+.app-sidebar-menu.ant-menu-dark .ant-menu-item-selected::after {
+  display: none;
+}
+
+.app-sidebar-menu.ant-menu-dark .ant-menu-item-divider {
+  border-color: #2f2f2f;
+  margin: 10px 8px;
+}
+
+.app-sidebar-footer {
+  flex-shrink: 0;
+  padding: 10px 10px 12px;
+  border-top: 1px solid #2a2a2a;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-sidebar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px;
+  border-radius: 8px;
+  background: #1b1b1b;
+}
+
+.app-sidebar-user.is-collapsed {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-sidebar-avatar.ant-avatar {
+  background: #B8863A !important;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.app-sidebar-user-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-sidebar-user-name {
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-sidebar-user-role {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.app-sidebar-logout {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.app-sidebar-logout:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.app-sidebar-collapse {
+  width: 100%;
+  border: none;
+  background: #1b1b1b;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-sidebar-collapse:hover {
+  color: #fff;
+  background: #242424;
 }
 
 .app-shell-content {
@@ -94,21 +288,6 @@ body {
   flex-wrap: wrap;
 }
 
-.report-edit-tools {
-  flex-shrink: 0;
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.report-edit-hint {
-  flex-shrink: 0;
-  display: block;
-  margin: 0;
-}
-
 .report-view-canvas {
   flex: 1;
   min-height: 0;
@@ -122,12 +301,209 @@ body {
   margin-bottom: 24px;
 }
 
+/* Report edit workspace: top bar + sidebar config + live preview */
+.report-edit-workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 0;
+  margin: -4px -4px 0;
+}
+
+.report-edit-topbar {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  background: #fff;
+  border: 1px solid #E4E0D8;
+  border-radius: 8px 8px 0 0;
+}
+
+.report-edit-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.report-edit-title-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.report-edit-template-name {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 280px;
+}
+
+.report-edit-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  border: 1px solid #E4E0D8;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.report-edit-sidebar {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid #E4E0D8;
+  background: #FAF9F6;
+  padding: 14px 14px 24px;
+}
+
+.report-edit-section {
+  margin-bottom: 22px;
+}
+
+.report-edit-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6B7280;
+  margin-bottom: 10px;
+}
+
+.report-edit-section-hint {
+  display: block;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.report-edit-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-edit-meta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: #4B5563;
+}
+
+.report-edit-meta-field .ant-input {
+  background: #fff;
+  color: #1C1E22;
+}
+
+.report-edit-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-edit-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.report-edit-column-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #fff;
+  border: 1px solid #E8E4DA;
+  cursor: grab;
+}
+
+.report-edit-column-row.is-dragging {
+  opacity: 0.55;
+  border-color: #1E5A93;
+}
+
+.report-edit-column-row .ant-checkbox-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.report-edit-column-handle {
+  color: #9CA3AF;
+  flex-shrink: 0;
+}
+
+.report-edit-column-move {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.report-edit-preview {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #E8E4DA;
+}
+
+.report-edit-preview .report-view-canvas {
+  border-radius: 0;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    linear-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px),
+    #E8E4DA;
+  background-size: 20px 20px;
+}
+
+.report-body-editable {
+  display: inline-block;
+  min-width: 100%;
+  outline: none;
+  cursor: text;
+  border-bottom: 1px dashed transparent;
+  padding: 1px 2px;
+}
+
+.report-body-editable:focus {
+  border-bottom-color: #1E5A93;
+  background: rgba(30, 90, 147, 0.06);
+}
+
+.report-table--editable-body td {
+  vertical-align: middle;
+}
+
+@media (max-width: 960px) {
+  .report-edit-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .report-edit-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #E4E0D8;
+    max-height: 280px;
+  }
+}
+
 @media print {
   .app-shell-header,
   .app-shell-sider,
+  .app-sidebar,
   .report-view-toolbar,
-  .report-edit-tools,
-  .report-edit-hint {
+  .report-edit-topbar,
+  .report-edit-sidebar {
     display: none !important;
   }
 
@@ -135,11 +511,16 @@ body {
   .app-shell-body,
   .app-shell-content,
   .report-view-page,
+  .report-edit-workspace,
+  .report-edit-body,
+  .report-edit-preview,
   .report-view-canvas {
     height: auto !important;
     overflow: visible !important;
     background: #fff !important;
     padding: 0 !important;
+    border: none !important;
+    display: block !important;
   }
 
   @page {
@@ -465,10 +846,6 @@ body {
 .role-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-}
-
-.role-card-supervisor:hover {
-  border-color: #2563eb;
 }
 
 .role-card-user:hover {

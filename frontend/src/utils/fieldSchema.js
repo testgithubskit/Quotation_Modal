@@ -21,6 +21,18 @@ export const DEFAULT_USER_FIELDS = [
   { key: 'is_active', label: 'Status', type: 'text', builtIn: true },
 ];
 
+/** Built-in company/organization profile fields (from signup + extras). */
+export const DEFAULT_ORGANIZATION_FIELDS = [
+  { key: 'name', label: 'Organization name', type: 'text', builtIn: true, required: true },
+  { key: 'code', label: 'Organization code', type: 'text', builtIn: true },
+  { key: 'address', label: 'Address', type: 'textarea', builtIn: true, required: true },
+  { key: 'email', label: 'Email', type: 'email', builtIn: true },
+  { key: 'phone', label: 'Phone', type: 'text', builtIn: true },
+  { key: 'website', label: 'Website', type: 'text', builtIn: true },
+  { key: 'tax_number', label: 'Tax / GST number', type: 'text', builtIn: true },
+  { key: 'notes', label: 'Notes', type: 'textarea', builtIn: true },
+];
+
 /** Built-in header fields on Generate Report; more can be added via Add Field. */
 export const DEFAULT_REPORT_HEADER_FIELDS = [
   { key: 'reportNo', label: 'Report No', type: 'text', builtIn: true, required: true },

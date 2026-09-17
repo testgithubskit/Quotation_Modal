@@ -527,7 +527,7 @@ export default function GenerateReport() {
                       ...Object.fromEntries(reportCustomerFields.map((f) => [f.key, undefined])),
                     });
                   }}
-                  notFoundContent="No customers found — ask supervisor to add customers"
+                  notFoundContent="No customers found — ask an admin to add customers"
                 />
               </Form.Item>
             </Col>

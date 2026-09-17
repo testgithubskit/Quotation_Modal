@@ -53,7 +53,12 @@ export default function ReportView() {
       </div>
 
       <div className="report-view-canvas">
-        <ReportDocument report={report} template={template} editable={false} />
+        <ReportDocument
+          report={report}
+          template={template}
+          editable={false}
+          bodyConfig={report.bodyConfig}
+        />
       </div>
     </div>
   );

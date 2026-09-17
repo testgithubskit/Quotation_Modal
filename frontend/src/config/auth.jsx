@@ -13,28 +13,25 @@ import {
 const AuthContext = createContext(null);
 
 export function mapBackendRole(roleName) {
-  if (roleName === 'ADMIN') return 'admin';
   if (roleName === 'USER') return 'user';
-  return 'supervisor';
+  return 'admin';
 }
 
 export function canAccessRoute(user, allowed) {
   if (!user) return false;
   if (!allowed) return true;
   const role = user.role_name;
-  if (allowed === 'admin') return role === 'ADMIN';
-  if (role === 'ADMIN') return true;
-  if (allowed === 'supervisor') return role === 'SUPERVISOR';
+  const isAdmin = role === 'ADMIN';
+  if (allowed === 'admin') return isAdmin;
+  if (isAdmin) return true;
   if (allowed === 'user') return role === 'USER';
   return false;
 }
 
 export function homePathForUser(user) {
   if (!user) return '/login';
-  const role = user.role_name;
-  if (role === 'ADMIN') return '/admin';
-  if (role === 'USER') return '/user/reports';
-  return '/supervisor/activities';
+  if (user.role_name === 'USER') return '/user/reports';
+  return '/admin';
 }
 
 export function AuthProvider({ children }) {
@@ -103,9 +100,10 @@ export function AuthProvider({ children }) {
       login,
       registerOrganization,
       logout,
+      refreshMe: loadMe,
       getApiErrorMessage,
     }),
-    [user, booting, login, registerOrganization, logout],
+    [user, booting, login, registerOrganization, logout, loadMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

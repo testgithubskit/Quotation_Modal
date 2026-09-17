@@ -1,10 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Space, Typography, Result, Select, ColorPicker, Tooltip, Divider, message, Spin,
+  Button, Space, Typography, Result, Select, Checkbox, Input, message, Spin, Tooltip,
 } from 'antd';
 import {
-  ArrowLeftOutlined, SaveOutlined, AlignLeftOutlined, AlignCenterOutlined, AlignRightOutlined,
-  BgColorsOutlined,
+  ArrowLeftOutlined,
+  SaveOutlined,
+  PrinterOutlined,
+  HolderOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../../config/auth.jsx';
@@ -12,14 +16,12 @@ import { useData } from '../../store/DataContext';
 import ReportDocument, { resolveReportNo } from '../../components/ReportDocument';
 import { resolveReportTemplate } from '../../utils/reportTemplate';
 import { templateHasRichLayout } from '../../utils/templatePlaceholders';
-
-const FONTS = [
-  { value: 'Inter, sans-serif', label: 'Inter (Sans)' },
-  { value: "'Source Serif 4', serif", label: 'Source Serif (Serif)' },
-  { value: 'Georgia, serif', label: 'Georgia' },
-  { value: "'Times New Roman', serif", label: 'Times New Roman' },
-  { value: "'Courier New', monospace", label: 'Courier New' },
-];
+import { printReportElement } from '../../utils/printReport';
+import { fieldLabelFromKey } from '../../utils/fieldSchema';
+import {
+  normalizeColumnConfig,
+  normalizeIncluded,
+} from '../../utils/reportBodyConfig';
 
 function mergeTemplate(base, overrides = {}) {
   const { headerHtml, footerHtml, ...rest } = overrides || {};
@@ -31,6 +33,34 @@ function mergeTemplate(base, overrides = {}) {
   };
 }
 
+function buildMetaFields(report) {
+  if (!report) return [];
+  const fields = [
+    { key: 'reportNo', label: 'Report No.', value: resolveReportNo(report) },
+    { key: 'date', label: 'Report Date', value: report.date || report.customHeader?.date || '—' },
+    { key: 'subject', label: 'Subject', value: report.subject || '—' },
+    { key: 'customer', label: 'Customer', value: report.customer?.name || '—' },
+    { key: 'company', label: 'Company', value: report.customer?.company || '—' },
+  ];
+
+  const header = report.customHeader || {};
+  Object.entries(header).forEach(([key, val]) => {
+    if (key === 'reportNo' || key === 'date') return;
+    if (val == null || val === '') return;
+    fields.push({ key, label: fieldLabelFromKey(key), value: String(val) });
+  });
+
+  if (!Object.keys(header).length) {
+    if (report.centre || report.center) {
+      fields.push({ key: 'centre', label: 'Centre', value: report.centre || report.center });
+    }
+    if (report.lab) fields.push({ key: 'lab', label: 'Lab', value: report.lab });
+    if (report.enquiryNo) fields.push({ key: 'enquiryNo', label: 'Enquiry No.', value: report.enquiryNo });
+  }
+
+  return fields;
+}
+
 export default function ReportEdit() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -39,7 +69,12 @@ export default function ReportEdit() {
 
   const [templateId, setTemplateId] = useState(null);
   const [overrides, setOverrides] = useState({});
+  const [draft, setDraft] = useState(null);
+  const [columns, setColumns] = useState(() => normalizeColumnConfig());
+  const [included, setIncluded] = useState(() => normalizeIncluded());
   const [hydrated, setHydrated] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dragKey, setDragKey] = useState(null);
 
   useEffect(() => {
     refreshReports().catch(() => {});
@@ -49,20 +84,32 @@ export default function ReportEdit() {
   const report = data.reports.find((r) => r.id === id);
 
   useEffect(() => {
-    if (!report) return;
+    setHydrated(false);
+    setDraft(null);
+  }, [id]);
+
+  useEffect(() => {
+    if (!report || hydrated) return;
     const resolved = resolveReportTemplate(
       data.templates,
       { ...report, overrides: undefined },
       user,
     );
-    // Prefer report's saved template; otherwise auto-pick designed/default
     const nextId = report.templateId || (resolved?.id !== 'default' ? resolved?.id : null) || null;
     setTemplateId(nextId);
     setOverrides(report.overrides || {});
+    setDraft({
+      ...report,
+      activities: structuredClone(report.activities || []),
+    });
+    setColumns(normalizeColumnConfig(report.bodyConfig?.columns));
+    setIncluded(normalizeIncluded(report.bodyConfig?.included));
     setHydrated(true);
-  }, [report?.id, data.templates, user]);
+  }, [report, data.templates, user, hydrated]);
 
-  if ((loadingReports && !report) || (report && !hydrated)) {
+  const metaFields = useMemo(() => buildMetaFields(draft || report), [draft, report]);
+
+  if ((loadingReports && !report) || (report && !hydrated) || (report && !draft)) {
     return (
       <div style={{ padding: 48, textAlign: 'center' }}>
         <Spin size="large" />
@@ -70,48 +117,103 @@ export default function ReportEdit() {
     );
   }
 
-  if (!report) {
-    return <Result status="404" title="Report not found" extra={<Button onClick={() => navigate('/user/reports')}>Back to Reports</Button>} />;
+  if (!report || !draft) {
+    return (
+      <Result
+        status="404"
+        title="Report not found"
+        extra={<Button onClick={() => navigate('/user/reports')}>Back to Reports</Button>}
+      />
+    );
   }
 
   const selectedBase = resolveReportTemplate(
     data.templates,
-    { ...report, templateId, overrides: undefined },
+    { ...draft, templateId, overrides: undefined },
     user,
   );
   const effective = mergeTemplate(selectedBase, overrides);
-  const isRich = templateHasRichLayout(effective);
-
-  const patch = (p) => setOverrides((o) => ({ ...o, ...p }));
+  const bodyConfig = { columns, included };
+  const templateLabel = selectedBase?.name || 'Default template';
 
   const handleSave = async () => {
+    setSaving(true);
     try {
-      await updateReport(report.id, { templateId, overrides });
+      await updateReport(report.id, {
+        ...draft,
+        templateId,
+        overrides,
+        bodyConfig,
+        activities: draft.activities,
+      });
       message.success('Report updated');
       navigate(`/user/reports/${report.id}/view`);
     } catch (error) {
       message.error(error?.response?.data?.error?.detail || 'Failed to update report');
+    } finally {
+      setSaving(false);
     }
   };
 
-  return (
-    <div className="report-view-page">
-      <div className="report-view-toolbar">
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/user/reports/${report.id}/view`)}>Back</Button>
-          <Typography.Title level={4} style={{ margin: 0 }}>Editing {resolveReportNo(report)}</Typography.Title>
-        </Space>
-        <Button type="primary" icon={<SaveOutlined />} onClick={handleSave}>Save Report</Button>
-      </div>
+  const handlePrint = () => {
+    const el = document.querySelector('.report-edit-preview .report-view-canvas');
+    printReportElement(el, resolveReportNo(draft));
+  };
 
-      <div className="card-shell report-edit-tools">
-        <Space size={6}>
-          <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>Base template</Typography.Text>
+  const moveColumn = (key, dir) => {
+    setColumns((prev) => {
+      const list = [...prev];
+      const idx = list.findIndex((c) => c.key === key);
+      const next = idx + dir;
+      if (idx < 0 || next < 0 || next >= list.length) return prev;
+      const tmp = list[idx];
+      list[idx] = list[next];
+      list[next] = tmp;
+      return list;
+    });
+  };
+
+  const onDropColumn = (targetKey) => {
+    if (!dragKey || dragKey === targetKey) {
+      setDragKey(null);
+      return;
+    }
+    setColumns((prev) => {
+      const list = [...prev];
+      const from = list.findIndex((c) => c.key === dragKey);
+      const to = list.findIndex((c) => c.key === targetKey);
+      if (from < 0 || to < 0) return prev;
+      const [item] = list.splice(from, 1);
+      list.splice(to, 0, item);
+      return list;
+    });
+    setDragKey(null);
+  };
+
+  return (
+    <div className="report-edit-workspace">
+      <div className="report-edit-topbar">
+        <div className="report-edit-topbar-left">
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(`/user/reports/${report.id}/view`)}>
+            Back
+          </Button>
+          <div className="report-edit-title-block">
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {resolveReportNo(draft)}
+            </Typography.Title>
+            <Typography.Text type="secondary" className="report-edit-template-name">
+              {templateLabel}
+              {templateHasRichLayout(effective) ? ' · designed' : ''}
+            </Typography.Text>
+          </div>
+        </div>
+
+        <Space wrap>
           <Select
-            size="small"
-            style={{ width: 220 }}
+            size="middle"
+            style={{ minWidth: 200 }}
             value={templateId}
-            placeholder="Select designed template"
+            placeholder="Change template"
             options={data.templates.map((t) => ({
               value: t.id,
               label: templateHasRichLayout(t) ? `${t.name} (designed)` : t.name,
@@ -121,60 +223,124 @@ export default function ReportEdit() {
               setOverrides({});
             }}
           />
+          <Button icon={<PrinterOutlined />} onClick={handlePrint}>Print</Button>
+          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={handleSave}>
+            Save config
+          </Button>
         </Space>
-
-        <Divider type="vertical" />
-
-        <Button
-          size="small"
-          icon={<BgColorsOutlined />}
-          onClick={() => navigate(templateId ? `/user/templates/edit/${templateId}` : '/user/templates')}
-        >
-          {isRich ? 'Edit design' : 'Design template'}
-        </Button>
-
-        {!isRich ? (
-          <>
-            <Divider type="vertical" />
-
-            <Space size={6}>
-              <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>Font</Typography.Text>
-              <Select size="small" style={{ width: 180 }} value={effective.fontFamily || FONTS[0].value} options={FONTS} onChange={(v) => patch({ fontFamily: v })} />
-            </Space>
-
-            <Divider type="vertical" />
-
-            <Space size={4}>
-              <Typography.Text type="secondary" style={{ fontSize: 12.5, marginRight: 4 }}>Header align</Typography.Text>
-              <Tooltip title="Left"><Button size="small" type={effective.align === 'left' || !effective.align ? 'primary' : 'default'} icon={<AlignLeftOutlined />} onClick={() => patch({ align: 'left' })} /></Tooltip>
-              <Tooltip title="Center"><Button size="small" type={effective.align === 'center' ? 'primary' : 'default'} icon={<AlignCenterOutlined />} onClick={() => patch({ align: 'center' })} /></Tooltip>
-              <Tooltip title="Right"><Button size="small" type={effective.align === 'right' ? 'primary' : 'default'} icon={<AlignRightOutlined />} onClick={() => patch({ align: 'right' })} /></Tooltip>
-            </Space>
-
-            <Divider type="vertical" />
-
-            <Space size={6}>
-              <Typography.Text type="secondary" style={{ fontSize: 12.5 }}>Accent color</Typography.Text>
-              <ColorPicker size="small" value={effective.primaryColor} onChangeComplete={(c) => patch({ primaryColor: c.toHexString() })} />
-            </Space>
-
-            <Divider type="vertical" />
-
-            <Button size="small" onClick={() => patch({ showLogo: effective.showLogo === false ? true : false })}>
-              {effective.showLogo === false ? 'Show Logo' : 'Hide Logo'}
-            </Button>
-          </>
-        ) : null}
       </div>
 
-      <Typography.Text type="secondary" className="report-edit-hint">
-        {isRich
-          ? 'This report uses your designed template header/footer. Change the base template above, or open Design Template to edit the layout.'
-          : 'No designed template selected yet — pick one above, or create one in Design Template. Until then you can edit company name, address, title, and footer below.'}
-      </Typography.Text>
+      <div className="report-edit-body">
+        <aside className="report-edit-sidebar">
+          <section className="report-edit-section">
+            <div className="report-edit-section-title">Document metadata</div>
+            <div className="report-edit-meta-list">
+              {metaFields.map((field) => (
+                <label key={field.key} className="report-edit-meta-field">
+                  <span>{field.label}</span>
+                  <Input size="small" value={field.value} readOnly />
+                </label>
+              ))}
+            </div>
+            <Typography.Text type="secondary" className="report-edit-section-hint">
+              Header &amp; footer come from the template. Only the body table is editable below.
+            </Typography.Text>
+          </section>
 
-      <div className="report-view-canvas">
-        <ReportDocument report={report} template={effective} editable={!isRich} onTemplateChange={patch} />
+          <section className="report-edit-section">
+            <div className="report-edit-section-title">Included content</div>
+            <div className="report-edit-checks">
+              <Checkbox
+                checked={included.showNotes}
+                onChange={(e) => setIncluded((s) => ({ ...s, showNotes: e.target.checked }))}
+              >
+                Activity notes
+              </Checkbox>
+              <Checkbox
+                checked={included.showTerms}
+                onChange={(e) => setIncluded((s) => ({ ...s, showTerms: e.target.checked }))}
+              >
+                Terms &amp; conditions
+              </Checkbox>
+              <Checkbox
+                checked={included.showCustomerContact}
+                onChange={(e) => setIncluded((s) => ({ ...s, showCustomerContact: e.target.checked }))}
+              >
+                Customer contact
+              </Checkbox>
+              <Checkbox
+                checked={included.showCustomerAddress}
+                onChange={(e) => setIncluded((s) => ({ ...s, showCustomerAddress: e.target.checked }))}
+              >
+                Customer address
+              </Checkbox>
+            </div>
+          </section>
+
+          <section className="report-edit-section">
+            <div className="report-edit-section-title">Columns</div>
+            <div className="report-edit-columns">
+              {columns.map((col, idx) => (
+                <div
+                  key={col.key}
+                  className={`report-edit-column-row${dragKey === col.key ? ' is-dragging' : ''}`}
+                  draggable
+                  onDragStart={() => setDragKey(col.key)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onDropColumn(col.key)}
+                  onDragEnd={() => setDragKey(null)}
+                >
+                  <HolderOutlined className="report-edit-column-handle" />
+                  <Checkbox
+                    checked={col.visible !== false}
+                    disabled={col.locked}
+                    onChange={(e) => {
+                      const visible = e.target.checked;
+                      setColumns((prev) => prev.map((c) => (
+                        c.key === col.key ? { ...c, visible } : c
+                      )));
+                    }}
+                  >
+                    {col.label}
+                  </Checkbox>
+                  <Space size={0} className="report-edit-column-move">
+                    <Tooltip title="Move up">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<ArrowUpOutlined />}
+                        disabled={idx === 0}
+                        onClick={() => moveColumn(col.key, -1)}
+                      />
+                    </Tooltip>
+                    <Tooltip title="Move down">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<ArrowDownOutlined />}
+                        disabled={idx === columns.length - 1}
+                        onClick={() => moveColumn(col.key, 1)}
+                      />
+                    </Tooltip>
+                  </Space>
+                </div>
+              ))}
+            </div>
+          </section>
+        </aside>
+
+        <div className="report-edit-preview">
+          <div className="report-view-canvas">
+            <ReportDocument
+              report={draft}
+              template={effective}
+              editable={false}
+              editableBody
+              bodyConfig={bodyConfig}
+              onBodyChange={(activities) => setDraft((d) => ({ ...d, activities }))}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -138,7 +138,7 @@ export default function AdminAnalytics() {
     const teamChart = Object.entries(roleMap).map(([name, count]) => ({
       name,
       count,
-      fill: name === 'ADMIN' ? palette.brass : name === 'SUPERVISOR' ? palette.navy : '#5B7C99',
+      fill: name === 'ADMIN' ? palette.brass : '#5B7C99',
     }));
 
     return {

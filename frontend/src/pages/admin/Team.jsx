@@ -29,14 +29,12 @@ import { enhanceColumns, recordMatchesSearch, serialNoColumn, tablePagination } 
 import { useTableScrollY } from '../../hooks/useTableScrollY';
 
 const ROLE_OPTIONS = [
-  { value: 'SUPERVISOR', label: 'Supervisor' },
   { value: 'USER', label: 'User' },
   { value: 'ADMIN', label: 'Admin' },
 ];
 
 const ROLE_COLOR = {
   ADMIN: 'gold',
-  SUPERVISOR: 'blue',
   USER: 'cyan',
 };
 
@@ -112,7 +110,7 @@ export default function AdminTeam() {
   const openCreate = () => {
     setEditing(null);
     form.resetFields();
-    form.setFieldsValue({ role_name: 'SUPERVISOR', is_active: true });
+    form.setFieldsValue({ role_name: 'USER', is_active: true });
     setOpen(true);
   };
 
@@ -276,7 +274,6 @@ export default function AdminTeam() {
           )}
         />
         <Typography.Text type="secondary" style={{ display: 'block', marginTop: 8 }}>
-          {users.filter((u) => u.role_name === 'SUPERVISOR').length} supervisors ·{' '}
           {users.filter((u) => u.role_name === 'USER').length} users ·{' '}
           {users.filter((u) => u.role_name === 'ADMIN').length} admins
         </Typography.Text>

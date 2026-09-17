@@ -3,7 +3,6 @@ import enum
 
 class UserRoleName(str, enum.Enum):
     ADMIN = "ADMIN"
-    SUPERVISOR = "SUPERVISOR"
     USER = "USER"
 
 

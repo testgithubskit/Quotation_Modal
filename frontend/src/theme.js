@@ -35,17 +35,20 @@ export const antdTheme = {
   },
   components: {
     Layout: {
-      headerBg: palette.navy,
-      siderBg: palette.navy,
+      headerBg: '#141414',
+      siderBg: '#141414',
       bodyBg: palette.paper,
       headerHeight: 60,
+      triggerBg: '#1b1b1b',
+      triggerColor: '#fff',
     },
     Menu: {
-      darkItemBg: palette.navy,
-      darkItemSelectedBg: palette.navyDeep,
+      darkItemBg: 'transparent',
+      darkItemSelectedBg: '#1E5A93',
       darkItemHoverBg: 'rgba(255,255,255,0.06)',
-      darkItemColor: 'rgba(255,255,255,0.75)',
-      darkItemSelectedColor: palette.brassLight,
+      darkItemColor: 'rgba(255,255,255,0.78)',
+      darkItemSelectedColor: '#ffffff',
+      itemBorderRadius: 6,
     },
     Table: {
       headerBg: '#F1EEE6',

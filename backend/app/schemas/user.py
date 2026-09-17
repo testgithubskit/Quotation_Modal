@@ -41,7 +41,7 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     full_name: str = Field(..., min_length=2, max_length=255)
     phone: Optional[str] = None
-    role_name: str = Field(..., pattern="^(ADMIN|SUPERVISOR|USER)$")
+    role_name: str = Field(..., pattern="^(ADMIN|USER)$")
     is_active: bool = True
     custom_data: dict = Field(default_factory=dict)
 
@@ -49,7 +49,7 @@ class UserCreate(BaseModel):
 class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=2, max_length=255)
     phone: Optional[str] = None
-    role_name: Optional[str] = Field(None, pattern="^(ADMIN|SUPERVISOR|USER)$")
+    role_name: Optional[str] = Field(None, pattern="^(ADMIN|USER)$")
     is_active: Optional[bool] = None
     custom_data: Optional[dict] = None
     password: Optional[str] = Field(None, min_length=8, max_length=128)

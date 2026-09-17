@@ -84,9 +84,6 @@ function AuthPageInner() {
           <Typography.Title level={2} className="auth-brand-title">
             Quotation Modal
           </Typography.Title>
-          <Typography.Paragraph type="secondary" className="auth-brand-sub">
-            Multi-tenant quotation management for lab &amp; testing services
-          </Typography.Paragraph>
         </div>
 
         <Tabs

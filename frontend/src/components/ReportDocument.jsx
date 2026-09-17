@@ -1,10 +1,11 @@
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { Upload, Typography } from 'antd';
 import { PictureOutlined } from '@ant-design/icons';
 
 import { fieldLabelFromKey } from '../utils/fieldSchema';
 import { defaultReportTemplate } from '../utils/reportTemplate';
 import { applyTemplatePlaceholders, templateHasRichLayout } from '../utils/templatePlaceholders';
+import { normalizeIncluded, visibleColumns } from '../utils/reportBodyConfig';
 
 const currency = (v) => `₹${Number(v || 0).toLocaleString('en-IN')}`;
 
@@ -27,7 +28,6 @@ function headerEntries(report) {
   const entries = [];
   if (report.customHeader && Object.keys(report.customHeader).length > 0) {
     Object.entries(report.customHeader).forEach(([key, val]) => {
-      // reportNo + date are rendered in the fixed top row — skip duplicates
       if (key === 'reportNo' || key === 'date') return;
       if (val != null && val !== '') entries.push({ key, label: fieldLabelFromKey(key), val });
     });
@@ -56,10 +56,26 @@ function Editable({ editable, value, onChange, style, placeholder }) {
         borderBottom: '1px dashed transparent',
         cursor: 'text',
       }}
-      onFocus={(e) => (e.currentTarget.style.borderBottom = '1px dashed #B8863A')}
+      onFocus={(e) => { e.currentTarget.style.borderBottom = '1px dashed #B8863A'; }}
       className="editable-field"
     >
       {value || placeholder}
+    </span>
+  );
+}
+
+function BodyEditable({ editable, value, onChange, align }) {
+  if (!editable) {
+    return <span style={{ textAlign: align }}>{value}</span>;
+  }
+  return (
+    <span
+      contentEditable
+      suppressContentEditableWarning
+      className="report-body-editable"
+      onBlur={(e) => onChange(e.currentTarget.textContent)}
+    >
+      {value ?? ''}
     </span>
   );
 }
@@ -74,17 +90,100 @@ function customerNameOnly(c) {
 function customerCompany(c) {
   if (!c) return '';
   if (c.company) return c.company;
-  // details is often "name\ncompany\naddress"
   const lines = String(c.details || '').split('\n').map((s) => s.trim()).filter(Boolean);
   if (lines.length >= 2) return lines[1];
   return '';
 }
 
-export default function ReportDocument({ report, template, editable = false, onTemplateChange }) {
+function cellRaw(activity, colKey, slLabel) {
+  const rate = Number(activity.unitRate ?? activity.cost ?? 0);
+  const qty = Number(activity.qty || 1);
+  switch (colKey) {
+    case 'slNo':
+      return slLabel;
+    case 'sampleActivity':
+      return activity.sampleActivity || activity.code || '';
+    case 'description':
+      return activity.description || activity.particulars || '';
+    case 'specification':
+      return activity.specification || '';
+    case 'qty':
+      return String(activity.qty ?? 1);
+    case 'unit':
+      return activity.unit || '';
+    case 'unitRate':
+      return String(rate);
+    case 'total':
+      return currency(rate * qty);
+    default:
+      return activity.customFields?.[colKey] ?? activity[colKey] ?? '';
+  }
+}
+
+function cellDisplay(activity, colKey, slLabel) {
+  if (colKey === 'unitRate') {
+    return currency(Number(activity.unitRate ?? activity.cost ?? 0));
+  }
+  if (colKey === 'total') {
+    const rate = Number(activity.unitRate ?? activity.cost ?? 0);
+    return currency(rate * Number(activity.qty || 1));
+  }
+  if (colKey === 'unit') {
+    return activity.unit || '—';
+  }
+  const raw = cellRaw(activity, colKey, slLabel);
+  return raw === '' ? '—' : raw;
+}
+
+function patchActivityField(activity, colKey, text) {
+  const next = { ...activity };
+  switch (colKey) {
+    case 'sampleActivity':
+      next.sampleActivity = text;
+      break;
+    case 'description':
+      next.description = text;
+      next.particulars = text;
+      break;
+    case 'specification':
+      next.specification = text;
+      break;
+    case 'qty': {
+      const n = Number(String(text).replace(/[^\d.-]/g, ''));
+      next.qty = Number.isFinite(n) && n > 0 ? n : 1;
+      break;
+    }
+    case 'unit':
+      next.unit = text || 'Nos';
+      break;
+    case 'unitRate': {
+      const n = Number(String(text).replace(/[^\d.-]/g, ''));
+      next.unitRate = Number.isFinite(n) ? n : 0;
+      next.cost = next.unitRate;
+      break;
+    }
+    default:
+      next.customFields = { ...(next.customFields || {}), [colKey]: text };
+      break;
+  }
+  return next;
+}
+
+export default function ReportDocument({
+  report,
+  template,
+  editable = false,
+  editableBody = false,
+  bodyConfig,
+  onTemplateChange,
+  onBodyChange,
+}) {
   if (!report) return null;
 
   const t = template || defaultReportTemplate();
   const patch = (field) => (val) => onTemplateChange && onTemplateChange({ [field]: val });
+  const included = normalizeIncluded(bodyConfig?.included);
+  const columns = visibleColumns(bodyConfig?.columns);
 
   const activities = report.activities || [];
   const grandTotal = activities.reduce((sum, a) => {
@@ -109,6 +208,46 @@ export default function ReportDocument({ report, template, editable = false, onT
   const footerHtml = rich
     ? applyTemplatePlaceholders(t.footerHtml, report, t)
     : '';
+
+  const updateRow = (path, colKey, text) => {
+    if (!onBodyChange) return;
+    const next = activities.map((a) => {
+      if (path.parentKey == null && a.key === path.key) {
+        return patchActivityField(a, colKey, text);
+      }
+      if (path.parentKey != null && a.key === path.parentKey) {
+        return {
+          ...a,
+          subActivities: (a.subActivities || []).map((sa) => (
+            sa.key === path.key ? patchActivityField(sa, colKey, text) : sa
+          )),
+        };
+      }
+      return a;
+    });
+    onBodyChange(next);
+  };
+
+  const renderCells = (activity, slLabel, path) => columns.map((col) => {
+    const locked = col.locked || col.key === 'slNo' || col.key === 'total';
+    const canEdit = editableBody && !locked;
+    const align = ['qty', 'unitRate', 'total'].includes(col.key) ? 'right' : undefined;
+    return (
+      <td key={col.key} style={{ textAlign: align }}>
+        {canEdit ? (
+          <BodyEditable
+            editable
+            value={cellRaw(activity, col.key, slLabel)}
+            onChange={(text) => updateRow(path, col.key, text)}
+          />
+        ) : (
+          cellDisplay(activity, col.key, slLabel)
+        )}
+      </td>
+    );
+  });
+
+  const totalColSpan = Math.max(columns.length - 1, 1);
 
   return (
     <div className="report-page" style={{ fontFamily: t.fontFamily || 'Inter, sans-serif' }}>
@@ -221,92 +360,69 @@ export default function ReportDocument({ report, template, editable = false, onT
               <td colSpan={3}>{company}</td>
             </tr>
           ) : null}
-          {(c.mobile || c.email) && (
+          {included.showCustomerContact && (c.mobile || c.email) ? (
             <tr>
               <th>Mobile / Email</th>
               <td colSpan={3}>
                 {[c.mobile, c.email].filter(Boolean).join(' · ')}
               </td>
             </tr>
-          )}
+          ) : null}
           {c.customFields && Object.entries(c.customFields).map(([key, val]) => (
             <tr key={key}>
               <th>{fieldLabelFromKey(key)}</th>
               <td colSpan={3}>{val}</td>
             </tr>
           ))}
-          {c.address && (
+          {included.showCustomerAddress && c.address ? (
             <tr>
               <th>Address</th>
               <td colSpan={3}>{c.address}</td>
             </tr>
-          )}
+          ) : null}
         </tbody>
       </table>
 
-      <table className="report-table">
+      <table className={`report-table${editableBody ? ' report-table--editable-body' : ''}`}>
         <thead>
           <tr>
-            <th style={{ width: '6%' }}>Sl.No</th>
-            <th>Sample/Activity</th>
-            <th>Description</th>
-            <th>Specification</th>
-            <th style={{ width: '6%' }}>Qty</th>
-            <th style={{ width: '8%' }}>Unit</th>
-            <th style={{ width: '10%' }}>Unit Rate</th>
-            <th style={{ width: '12%' }}>Total</th>
+            {columns.map((col) => (
+              <th key={col.key}>{col.label}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {activities.map((a, i) => {
-            const rate = Number(a.unitRate ?? a.cost ?? 0);
-            return (
-              <>
-                <tr key={a.key}>
-                  <td>{i + 1}</td>
-                  <td>{a.sampleActivity || a.code}</td>
-                  <td>{a.description || a.particulars}</td>
-                  <td>{a.specification}</td>
-                  <td>{a.qty || 1}</td>
-                  <td>{a.unit || '—'}</td>
-                  <td>{currency(rate)}</td>
-                  <td>{currency(rate * Number(a.qty || 1))}</td>
+          {activities.map((a, i) => (
+            <Fragment key={a.key || `a-${i}`}>
+              <tr>
+                {renderCells(a, String(i + 1), { key: a.key })}
+              </tr>
+              {(a.subActivities || []).map((sa, j) => (
+                <tr className="sub-activity-row" key={sa.key || `sa-${i}-${j}`}>
+                  {renderCells(sa, `${i + 1}.${j + 1}`, { key: sa.key, parentKey: a.key })}
                 </tr>
-                {(a.subActivities || []).map((sa, j) => {
-                  const subRate = Number(sa.unitRate ?? sa.cost ?? 0);
-                  return (
-                    <tr className="sub-activity-row" key={sa.key}>
-                      <td>{i + 1}.{j + 1}</td>
-                      <td>{sa.sampleActivity || sa.code}</td>
-                      <td>{sa.description || sa.particulars}</td>
-                      <td>{sa.specification}</td>
-                      <td>{sa.qty || 1}</td>
-                      <td>{sa.unit || '—'}</td>
-                      <td>{currency(subRate)}</td>
-                      <td>{currency(subRate * Number(sa.qty || 1))}</td>
-                    </tr>
-                  );
-                })}
-              </>
-            );
-          })}
+              ))}
+            </Fragment>
+          ))}
           <tr>
-            <td colSpan={7} style={{ textAlign: 'right', fontWeight: 600 }}>Grand Total</td>
+            <td colSpan={totalColSpan} style={{ textAlign: 'right', fontWeight: 600 }}>Grand Total</td>
             <td style={{ fontWeight: 700 }}>{currency(grandTotal)}</td>
           </tr>
         </tbody>
       </table>
 
-      {notes.length > 0 && (
+      {included.showNotes && notes.length > 0 && (
         <div style={{ marginTop: 20 }}>
           <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>Activity Notes</Typography.Text>
           {notes.map((note, i) => (
-            <div key={i} style={{ fontSize: 12.5, color: '#5B6169', marginBottom: 4 }}>{i + 1}. {note}</div>
+            <div key={i} style={{ fontSize: 12.5, color: '#5B6169', marginBottom: 4 }}>
+              {i + 1}. {typeof note === 'string' ? note : note?.value}
+            </div>
           ))}
         </div>
       )}
 
-      {(terms.termsAndConditions || terms.customFields) && (
+      {included.showTerms && (terms.termsAndConditions || terms.customFields) ? (
         <div style={{ marginTop: 20 }}>
           <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>Terms &amp; Conditions</Typography.Text>
           {terms.termsAndConditions && (
@@ -327,10 +443,9 @@ export default function ReportDocument({ report, template, editable = false, onT
             </table>
           )}
         </div>
-      )}
+      ) : null}
 
-      {/* Legacy terms format for older reports */}
-      {!terms.termsAndConditions && !terms.customFields && (terms.payment || terms.deliveryPeriod) && (
+      {included.showTerms && !terms.termsAndConditions && !terms.customFields && (terms.payment || terms.deliveryPeriod) ? (
         <div style={{ marginTop: 20 }}>
           <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>Terms &amp; Conditions</Typography.Text>
           <table className="report-table">
@@ -344,7 +459,7 @@ export default function ReportDocument({ report, template, editable = false, onT
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
 
       <div style={{ marginTop: 32, paddingTop: 12, borderTop: '1px solid #E4E0D8' }}>
         {rich ? (
