@@ -1,10 +1,24 @@
 import axios from 'axios';
 
-/** Base URL from .env — same pattern as CMF Config/auth.js */
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 const TOKEN_KEY = 'access_token';
 const REFRESH_KEY = 'refresh_token';
+
+let unauthorizedHandler = null;
+
+export function setUnauthorizedHandler(handler) {
+  unauthorizedHandler = handler;
+}
+
+function forceLogout() {
+  clearTokens();
+  if (typeof unauthorizedHandler === 'function') {
+    unauthorizedHandler();
+  } else if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
+    window.location.assign('/login');
+  }
+}
 
 export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -31,9 +45,7 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -43,18 +55,17 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const original = error.config;
-    if (error.response?.status !== 401 || original._retry) {
+    if (error.response?.status !== 401 || original?._retry) {
       return Promise.reject(error);
     }
 
     const refresh = getRefreshToken();
     if (!refresh) {
-      clearTokens();
+      forceLogout();
       return Promise.reject(error);
     }
 
     original._retry = true;
-
     try {
       if (!refreshPromise) {
         refreshPromise = axios
@@ -67,12 +78,11 @@ api.interceptors.response.use(
             refreshPromise = null;
           });
       }
-
       const accessToken = await refreshPromise;
       original.headers.Authorization = `Bearer ${accessToken}`;
       return api(original);
     } catch (refreshError) {
-      clearTokens();
+      forceLogout();
       return Promise.reject(refreshError);
     }
   },
@@ -90,10 +100,7 @@ export function getApiErrorMessage(error, fallback = 'Something went wrong') {
     const msg = first.msg || first.message || 'Invalid value';
     return loc ? `${loc}: ${msg}` : msg;
   }
-  if (data?.error?.detail) return data.error.detail;
-  const detail = data?.detail;
-  if (typeof detail === 'string') return detail;
-  if (Array.isArray(detail) && detail[0]?.msg) return detail[0].msg;
+  if (typeof data?.detail === 'string') return data.detail;
   if (data?.message) return data.message;
   return error?.message || fallback;
 }

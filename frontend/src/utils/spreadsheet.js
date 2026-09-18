@@ -1,253 +1,169 @@
 import * as XLSX from 'xlsx';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
-export function normalizeHeader(value) {
-  return String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/%/g, ' percent ')
-    .replace(/\s+/g, '_')
-    .replace(/[^a-z0-9_]/g, '')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '');
+/** e.g. activities-18-9-2026.xlsx (slashes replaced — invalid in Windows filenames) */
+export function datedFilename(baseName, extension) {
+  const d = new Date();
+  const stamp = `${d.getDate()}-${d.getMonth() + 1}-${d.getFullYear()}`;
+  const ext = extension.startsWith('.') ? extension.slice(1) : extension;
+  return `${baseName}-${stamp}.${ext}`;
 }
 
 function cellText(value) {
   if (value == null) return '';
-  return String(value).trim();
+  return String(value).replace(/\s+/g, ' ').trim();
 }
 
-function isLikelyHeaderCell(text) {
-  const n = normalizeHeader(text);
-  if (!n) return false;
+function looksLikeHeaderCell(text) {
+  const t = text.toLowerCase();
   return (
-    n.includes('particular')
-    || n.includes('specification')
-    || n === 'specs'
-    || n.includes('sl_no')
-    || n === 'slno'
-    || n === 'code'
-    || n.includes('activity')
-    || n.includes('charge')
-    || n.includes('cost')
-    || n.includes('price')
-    || n.includes('scope')
-    || n.includes('machine')
+    t.includes('sl.no')
+    || t.includes('sl no')
+    || t === 's.no'
+    || t === 'sno'
+    || t.includes('particular')
+    || t.includes('activity code')
+    || t.includes('customer name')
+    || t === 'code'
+    || t === 'name'
+    || t.includes('specification')
+    || t.includes('description')
+    || t.includes('unit price')
+    || t.includes('proposed charge')
   );
 }
 
-/** Find the header row in a sheet (skips title / revision rows). */
-export function findHeaderRowIndex(aoa) {
-  const rows = aoa || [];
-  let bestIdx = -1;
-  let bestScore = 0;
-  const scan = Math.min(rows.length, 25);
+/** Find the first row that looks like a real column header (skips title/banner rows). */
+function findHeaderRowIndex(matrix) {
+  let bestIdx = 0;
+  let bestScore = -1;
+  const scan = Math.min(matrix.length, 30);
   for (let i = 0; i < scan; i += 1) {
-    const row = rows[i] || [];
-    const cells = row.map(cellText).filter(Boolean);
-    if (cells.length < 2) continue;
-    const score = cells.filter(isLikelyHeaderCell).length;
+    const row = matrix[i] || [];
+    const texts = row.map(cellText).filter(Boolean);
+    if (texts.length < 2) continue;
+    let score = 0;
+    texts.forEach((t) => {
+      if (looksLikeHeaderCell(t)) score += 3;
+      else if (t.length > 0 && t.length < 40) score += 1;
+    });
+    // Prefer rows that include an id-like header + a name-like header
+    const joined = texts.join(' | ').toLowerCase();
+    if (joined.includes('sl') && joined.includes('particular')) score += 8;
+    if (joined.includes('activity') && joined.includes('code')) score += 8;
+    if (joined.includes('customer') && joined.includes('name')) score += 8;
     if (score > bestScore) {
       bestScore = score;
       bestIdx = i;
     }
   }
-  return bestScore >= 2 ? bestIdx : (rows.length ? 0 : -1);
+  return bestIdx;
 }
 
-function uniqueHeaders(rawHeaders) {
-  const seen = {};
-  return rawHeaders.map((h, idx) => {
-    let base = normalizeHeader(h) || `column_${idx + 1}`;
-    if (seen[base] == null) {
-      seen[base] = 0;
-      return base;
-    }
-    seen[base] += 1;
-    return `${base}_${seen[base]}`;
+function matrixToObjects(matrix) {
+  if (!matrix?.length) return [];
+  const headerIdx = findHeaderRowIndex(matrix);
+  const headerRow = matrix[headerIdx] || [];
+  const headers = headerRow.map((h, i) => {
+    const label = cellText(h);
+    return label || `Column_${i + 1}`;
   });
-}
 
-function sheetToNormalizedRows(sheet) {
-  const aoa = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
-  if (!aoa.length) return [];
-  const headerIdx = findHeaderRowIndex(aoa);
-  if (headerIdx < 0) return [];
+  // Deduplicate headers
+  const seen = {};
+  const uniqueHeaders = headers.map((h) => {
+    const key = h;
+    if (seen[key] == null) {
+      seen[key] = 0;
+      return key;
+    }
+    seen[key] += 1;
+    return `${key}_${seen[key]}`;
+  });
 
-  const headerRow = aoa[headerIdx] || [];
-  const headers = uniqueHeaders(headerRow.map(cellText));
   const rows = [];
-
-  for (let r = headerIdx + 1; r < aoa.length; r += 1) {
-    const line = aoa[r] || [];
+  for (let r = headerIdx + 1; r < matrix.length; r += 1) {
+    const line = matrix[r] || [];
     const obj = {};
     let nonEmpty = 0;
-    headers.forEach((key, c) => {
-      const val = cellText(line[c]);
-      obj[key] = val;
-      if (val) nonEmpty += 1;
+    uniqueHeaders.forEach((header, c) => {
+      const val = line[c];
+      const text = typeof val === 'number' ? val : cellText(val);
+      obj[header] = text;
+      if (text !== '' && text != null) nonEmpty += 1;
     });
     if (nonEmpty === 0) continue;
-    // Skip note / section-only rows
-    const joined = Object.values(obj).join(' ').toLowerCase();
-    if (joined.startsWith('note') && nonEmpty <= 2) continue;
+    // Skip repeated header rows inside the sheet
+    const first = cellText(obj[uniqueHeaders[0]]);
+    if (looksLikeHeaderCell(first) && uniqueHeaders.some((h) => looksLikeHeaderCell(cellText(obj[h])))) {
+      continue;
+    }
     rows.push(obj);
   }
   return rows;
 }
 
-const SKIP_SHEETS = new Set(['notes', 'justification', 'sheet1', 'sheet2']);
-
-function parseCsvText(text) {
-  const workbook = XLSX.read(text, { type: 'string' });
-  return parseWorkbook(workbook);
-}
-
-function parseWorkbook(workbook) {
-  const all = [];
-  (workbook.SheetNames || []).forEach((name) => {
-    const trimmed = String(name || '').trim();
-    if (SKIP_SHEETS.has(trimmed.toLowerCase())) return;
-    const sheet = workbook.Sheets[name];
-    if (!sheet || !sheet['!ref']) return;
-    const rows = sheetToNormalizedRows(sheet);
-    rows.forEach((row) => {
-      all.push({ ...row, __sheet: trimmed });
-    });
-  });
-  return all;
-}
-
-async function readFileAsArrayBuffer(file) {
+/**
+ * Parse .xlsx / .xls / .csv into row objects.
+ * Handles title rows above the real header (e.g. metrology price lists).
+ * Merges all sheets that contain tabular data.
+ */
+export function parseSpreadsheetFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        const allRows = [];
+        workbook.SheetNames.forEach((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return;
+          const matrix = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            defval: '',
+            raw: false,
+            blankrows: false,
+          });
+          const objects = matrixToObjects(matrix);
+          objects.forEach((row) => {
+            allRows.push({ ...row, _sheet: sheetName.trim() });
+          });
+        });
+        resolve(allRows);
+      } catch (err) {
+        reject(err);
+      }
+    };
     reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
     reader.readAsArrayBuffer(file);
   });
 }
 
-async function readFileAsText(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error || new Error('Failed to read file'));
-    reader.readAsText(file);
+export function downloadRowsExcel(rows, filename = 'export.xlsx') {
+  const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ '': '' }]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+  XLSX.writeFile(workbook, filename);
+}
+
+/** @param {Record<string, unknown>[]} rows */
+export function downloadRowsPdf(rows, filename = 'export.pdf', title = 'Export') {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  doc.setFontSize(14);
+  doc.text(title, 40, 36);
+
+  const headers = rows.length ? Object.keys(rows[0]).filter((k) => k !== '_sheet') : ['No data'];
+  const body = rows.map((row) => headers.map((key) => String(row[key] ?? '')));
+
+  autoTable(doc, {
+    startY: 48,
+    head: [headers],
+    body: body.length ? body : [['No rows']],
+    styles: { fontSize: 8, cellPadding: 4 },
+    headStyles: { fillColor: [13, 148, 136] },
   });
-}
 
-/** Parse .xlsx / .xls / .csv into row objects keyed by normalized headers. */
-export async function parseSpreadsheetFile(file) {
-  const name = (file.name || '').toLowerCase();
-  if (name.endsWith('.csv') || name.endsWith('.txt')) {
-    const text = await readFileAsText(file);
-    return parseCsvText(text);
-  }
-
-  const buffer = await readFileAsArrayBuffer(file);
-  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-  return parseWorkbook(workbook);
-}
-
-function firstMatch(normalized, candidates) {
-  for (const key of candidates) {
-    if (normalized[key] != null && String(normalized[key]).trim() !== '') {
-      return String(normalized[key]).trim();
-    }
-  }
-  // fuzzy: any key that includes a candidate token
-  const keys = Object.keys(normalized);
-  for (const cand of candidates) {
-    const hit = keys.find((k) => k === cand || k.includes(cand));
-    if (hit && String(normalized[hit]).trim() !== '') {
-      return String(normalized[hit]).trim();
-    }
-  }
-  return '';
-}
-
-function parseCost(raw) {
-  const text = String(raw ?? '').trim();
-  if (!text) return 0;
-  if (/actual|deputation|na|n\/a/i.test(text)) return 0;
-  const num = Number(text.replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(num) ? num : 0;
-}
-
-const CODE_KEYS = ['code', 'activity_code', 'activitycode', 'sl_no', 'slno', 'sl_no_', 's_no', 'sno'];
-const SPEC_KEYS = ['specification', 'specifications', 'specs', 'spec'];
-const PART_KEYS = [
-  'particulars', 'particular', 'description', 'activity', 'name',
-  'machine_equipment', 'machineequipment', 'equipment',
-];
-const COST_KEYS = [
-  'proposed_charges_april_2023',
-  'proposed_charges_2023',
-  'proposed_charges',
-  'charges_april_2023',
-  'unit_price',
-  'price',
-  'cost',
-  'charges',
-];
-const SCOPE_KEYS = ['scope_of_calibration', 'scope', 'scope_'];
-
-const BUILTIN_ACTIVITY_KEYS = new Set(['code', 'specification', 'particulars', 'cost']);
-
-/**
- * Map spreadsheet rows to activity payloads.
- * Extra / custom columns from fieldDefs are filled when Excel headers match key or label.
- */
-export function mapRowsToActivities(rows, fieldDefs = []) {
-  const customFields = (fieldDefs || []).filter((f) => f && !BUILTIN_ACTIVITY_KEYS.has(f.key));
-  let lastCode = '';
-
-  return (rows || [])
-    .map((row, index) => {
-      const normalized = { ...(row || {}) };
-      // already normalized keys from parser; still normalize any leftovers
-      Object.entries(row || {}).forEach(([key, value]) => {
-        if (key === '__sheet') return;
-        normalized[normalizeHeader(key)] = value;
-      });
-
-      let code = firstMatch(normalized, CODE_KEYS);
-      if (!code && lastCode) code = lastCode;
-      if (code) lastCode = code;
-
-      let specification = firstMatch(normalized, SPEC_KEYS);
-      let particulars = firstMatch(normalized, PART_KEYS);
-      const scope = firstMatch(normalized, SCOPE_KEYS);
-      if (scope) {
-        particulars = particulars ? `${particulars} — ${scope}` : scope;
-      }
-
-      const costRaw = firstMatch(normalized, COST_KEYS);
-      const cost = parseCost(costRaw);
-
-      if (!code && !specification && !particulars) return null;
-      // Skip pure header echoes
-      if (/^sl\.?\s*no/i.test(code) || /^particular/i.test(particulars)) return null;
-
-      const activity = {
-        code: code || `ACT-${Date.now()}${index}`,
-        specification: specification || '',
-        particulars: particulars || '',
-        cost,
-      };
-
-      customFields.forEach((field) => {
-        const aliases = [
-          normalizeHeader(field.key),
-          normalizeHeader(field.label),
-        ].filter(Boolean);
-        const value = firstMatch(normalized, aliases);
-        if (value !== '') {
-          activity[field.key] = field.type === 'number' ? parseCost(value) : value;
-        }
-      });
-
-      // Also keep any unmatched non-empty columns that match custom field keys loosely
-      return activity;
-    })
-    .filter(Boolean);
+  doc.save(filename);
 }

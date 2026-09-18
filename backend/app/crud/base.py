@@ -46,7 +46,7 @@ class CRUDBase(Generic[ModelType]):
         organization_id: UUID,
         *,
         page: int = 1,
-        page_size: int = 20,
+        page_size: int | None = None,
         search: str | None = None,
         sort_by: str = "created_at",
         sort_order: str = "desc",
@@ -63,7 +63,8 @@ class CRUDBase(Generic[ModelType]):
         count_stmt = self._apply_search(count_stmt, search)
         total = db.scalar(count_stmt) or 0
         stmt = self._apply_sort(stmt, sort_by, sort_order)
-        stmt = stmt.offset((page - 1) * page_size).limit(page_size)
+        if page_size is not None:
+            stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         items = list(db.scalars(stmt).all())
         return items, total
 

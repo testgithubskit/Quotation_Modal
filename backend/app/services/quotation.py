@@ -407,7 +407,7 @@ class QuotationTemplateService:
         db.commit()
 
     def _clear_other_defaults(self, db: Session, organization_id: UUID, keep_id: UUID) -> None:
-        items, _ = quotation_template_crud.list_by_org(db, organization_id, page=1, page_size=100)
+        items, _ = quotation_template_crud.list_by_org(db, organization_id)
         for item in items:
             if item.id != keep_id and item.is_default:
                 item.is_default = False

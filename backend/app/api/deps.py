@@ -15,15 +15,14 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def get_pagination(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
     search: str | None = Query(None),
     sort_by: str = Query("created_at"),
     sort_order: str = Query("desc", pattern="^(asc|desc)$"),
 ) -> dict:
+    """List filters only — pagination is handled by the client. Returns all matching rows."""
     return {
-        "page": page,
-        "page_size": page_size,
+        "page": 1,
+        "page_size": None,
         "search": search,
         "sort_by": sort_by,
         "sort_order": sort_order,
