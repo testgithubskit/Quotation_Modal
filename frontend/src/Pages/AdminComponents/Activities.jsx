@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Upload, message,
+  Button, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Tooltip, Upload, message,
 } from 'antd';
 import {
   PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
@@ -8,11 +8,12 @@ import {
   FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../../config/auth.js';
+import { useAuth } from '../../config/AuthContext.jsx';
 import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
 import BulkReviewModal from '../../Components/BulkReviewModal';
 import { slugCode, slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
-import { datedFilename, downloadRowsExcel, downloadRowsPdf, parseSpreadsheetFile } from '../../utils/spreadsheet';
+import { datedFilename, downloadReportExcel, downloadReportPdf, parseSpreadsheetFile } from '../../utils/spreadsheet';
 import {
   builtinAliases,
   getActivityBuiltinColumns,
@@ -28,6 +29,8 @@ function pick(row, ...keys) {
 }
 
 export default function Activities() {
+  const { user } = useAuth();
+  const orgName = user?.organization_name || 'Organization';
   const [allRows, setAllRows] = useState([]);
   const [fields, setFields] = useState([]);
   const [builtinTick, setBuiltinTick] = useState(0);
@@ -426,16 +429,18 @@ export default function Activities() {
         editingId === record.id
           ? (
             <Space>
-              <Button type="text" icon={<CheckOutlined />} onClick={() => saveEdit(record)} />
-              <Button type="text" icon={<CloseOutlined />} onClick={cancelEdit} />
+              <Tooltip title="Save"><Button type="text" icon={<CheckOutlined />} onClick={() => saveEdit(record)} /></Tooltip>
+              <Tooltip title="Cancel"><Button type="text" icon={<CloseOutlined />} onClick={cancelEdit} /></Tooltip>
             </Space>
           )
           : (
             <Space>
-              <Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} />
-              <Popconfirm title="Delete activity?" onConfirm={() => remove(record.id)}>
-                <Button type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
+              <Tooltip title="Edit"><Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} /></Tooltip>
+              <Tooltip title="Delete">
+                <Popconfirm title="Delete activity?" onConfirm={() => remove(record.id)}>
+                  <Button type="text" danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              </Tooltip>
             </Space>
           )
       ),
@@ -467,13 +472,21 @@ export default function Activities() {
                     key: 'excel',
                     icon: <FileExcelOutlined />,
                     label: 'Download as Excel',
-                    onClick: () => downloadRowsExcel(toExportRows(filtered), datedFilename('activities', 'xlsx')),
+                    onClick: () => downloadReportExcel(
+                      toExportRows(filtered),
+                      datedFilename('activities', 'xls'),
+                      { organizationName: orgName, title: 'Activities Report' },
+                    ),
                   },
                   {
                     key: 'pdf',
                     icon: <FilePdfOutlined />,
                     label: 'Download as PDF',
-                    onClick: () => downloadRowsPdf(toExportRows(filtered), datedFilename('activities', 'pdf'), 'Activities'),
+                    onClick: () => downloadReportPdf(
+                      toExportRows(filtered),
+                      datedFilename('activities', 'pdf'),
+                      { organizationName: orgName, title: 'Activities Report' },
+                    ),
                   },
                 ],
               }}

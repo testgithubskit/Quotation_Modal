@@ -23,7 +23,7 @@ function UserShell() {
         ]}
         onMenuClick={({ key }) => navigate(`/user/${key}`)}
       />
-      <Content className="min-h-0 flex-1 overflow-hidden bg-slate-100 p-4 font-sans">
+      <Content className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-4 font-sans">
         <Outlet />
       </Content>
     </Layout>

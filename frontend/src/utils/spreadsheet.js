@@ -48,7 +48,6 @@ function findHeaderRowIndex(matrix) {
       if (looksLikeHeaderCell(t)) score += 3;
       else if (t.length > 0 && t.length < 40) score += 1;
     });
-    // Prefer rows that include an id-like header + a name-like header
     const joined = texts.join(' | ').toLowerCase();
     if (joined.includes('sl') && joined.includes('particular')) score += 8;
     if (joined.includes('activity') && joined.includes('code')) score += 8;
@@ -70,7 +69,6 @@ function matrixToObjects(matrix) {
     return label || `Column_${i + 1}`;
   });
 
-  // Deduplicate headers
   const seen = {};
   const uniqueHeaders = headers.map((h) => {
     const key = h;
@@ -94,7 +92,6 @@ function matrixToObjects(matrix) {
       if (text !== '' && text != null) nonEmpty += 1;
     });
     if (nonEmpty === 0) continue;
-    // Skip repeated header rows inside the sheet
     const first = cellText(obj[uniqueHeaders[0]]);
     if (looksLikeHeaderCell(first) && uniqueHeaders.some((h) => looksLikeHeaderCell(cellText(obj[h])))) {
       continue;
@@ -141,6 +138,52 @@ export function parseSpreadsheetFile(file) {
   });
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function reportColumns(rows) {
+  if (!rows?.length) return ['SL NO'];
+  const keys = Object.keys(rows[0]).filter((k) => k !== '_sheet' && k !== 'SL NO' && k !== 'Sl No');
+  return ['SL NO', ...keys];
+}
+
+function reportBody(rows, columns) {
+  return (rows || []).map((row, i) => columns.map((col) => {
+    if (col === 'SL NO') return String(i + 1);
+    const val = row[col];
+    return val == null || val === '' ? '—' : String(val);
+  }));
+}
+
+function formatGeneratedOn(date = new Date()) {
+  return date.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+
+function triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Simple sheet (no report header) — used by template designer export */
 export function downloadRowsExcel(rows, filename = 'export.xlsx') {
   const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ '': '' }]);
   const workbook = XLSX.utils.book_new();
@@ -148,21 +191,112 @@ export function downloadRowsExcel(rows, filename = 'export.xlsx') {
   XLSX.writeFile(workbook, filename);
 }
 
+/**
+ * Report-style Excel with centered org name, title, SL NO, and full cell borders.
+ * Written as HTML spreadsheet so Excel shows borders without a paid SheetJS build.
+ */
+export function downloadReportExcel(rows, filename = 'export.xls', {
+  organizationName = 'Organization',
+  title = 'Report',
+} = {}) {
+  const columns = reportColumns(rows);
+  const body = reportBody(rows, columns);
+  const colCount = columns.length;
+  const generated = formatGeneratedOn();
+  const border = 'border:1px solid #94a3b8;';
+  const cell = `${border}padding:6px 8px;font-family:Arial,sans-serif;font-size:11px;color:#0f172a;`;
+  const headCell = `${border}padding:7px 8px;font-family:Arial,sans-serif;font-size:11px;font-weight:bold;color:#ffffff;background:#64748b;text-transform:uppercase;`;
+
+  const headerRow = columns.map((c) => `<th style="${headCell}">${escapeHtml(c)}</th>`).join('');
+  const dataRows = body.map((cells, idx) => {
+    const bg = idx % 2 === 1 ? 'background:#f8fafc;' : 'background:#ffffff;';
+    return `<tr>${cells.map((v) => `<td style="${cell}${bg}">${escapeHtml(v)}</td>`).join('')}</tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+<x:Name>Report</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body>
+<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%">
+  <tr><td colspan="${colCount}" style="text-align:center;font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#0f172a;padding:8px 4px">${escapeHtml(organizationName)}</td></tr>
+  <tr><td colspan="${colCount}" style="text-align:center;font-family:Arial,sans-serif;font-size:13px;font-weight:600;color:#475569;padding:2px 4px 10px">${escapeHtml(title)}</td></tr>
+  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:11px;color:#64748b;padding:2px 4px">Total rows: ${body.length}</td></tr>
+  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:11px;color:#64748b;padding:2px 4px 12px">Generated on: ${escapeHtml(generated)}</td></tr>
+  <tr>${headerRow}</tr>
+  ${dataRows || `<tr><td colspan="${colCount}" style="${cell}">No rows</td></tr>`}
+</table>
+</body></html>`;
+
+  const safeName = filename.toLowerCase().endsWith('.xlsx')
+    ? `${filename.slice(0, -5)}.xls`
+    : (filename.toLowerCase().endsWith('.xls') ? filename : `${filename}.xls`);
+  triggerDownload(new Blob([html], { type: 'application/vnd.ms-excel' }), safeName);
+}
+
 /** @param {Record<string, unknown>[]} rows */
 export function downloadRowsPdf(rows, filename = 'export.pdf', title = 'Export') {
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-  doc.setFontSize(14);
-  doc.text(title, 40, 36);
+  downloadReportPdf(rows, filename, { title, organizationName: '' });
+}
 
-  const headers = rows.length ? Object.keys(rows[0]).filter((k) => k !== '_sheet') : ['No data'];
-  const body = rows.map((row) => headers.map((key) => String(row[key] ?? '')));
+/** Report-style PDF: centered org name, title, SL NO, grid borders */
+export function downloadReportPdf(rows, filename = 'export.pdf', {
+  organizationName = '',
+  title = 'Report',
+} = {}) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  let y = 36;
+
+  if (organizationName) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.setTextColor(15, 23, 42);
+    doc.text(String(organizationName).toUpperCase(), pageW / 2, y, { align: 'center' });
+    y += 20;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(71, 85, 105);
+  doc.text(String(title), pageW / 2, y, { align: 'center' });
+  y += 18;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Total rows: ${rows?.length || 0}`, 40, y);
+  y += 12;
+  doc.text(`Generated on: ${formatGeneratedOn()}`, 40, y);
+  y += 14;
+
+  const columns = reportColumns(rows);
+  const body = reportBody(rows, columns);
 
   autoTable(doc, {
-    startY: 48,
-    head: [headers],
-    body: body.length ? body : [['No rows']],
-    styles: { fontSize: 8, cellPadding: 4 },
-    headStyles: { fillColor: [13, 148, 136] },
+    startY: y,
+    head: [columns.map((c) => c.toUpperCase())],
+    body: body.length ? body : [columns.map((_, i) => (i === 0 ? '' : 'No rows'))],
+    styles: {
+      fontSize: 8,
+      cellPadding: 4,
+      lineColor: [148, 163, 184],
+      lineWidth: 0.4,
+      textColor: [15, 23, 42],
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [100, 116, 139],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'left',
+      lineColor: [148, 163, 184],
+      lineWidth: 0.4,
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    theme: 'grid',
+    margin: { left: 40, right: 40 },
   });
 
   doc.save(filename);

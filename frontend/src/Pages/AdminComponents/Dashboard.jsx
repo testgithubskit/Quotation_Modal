@@ -100,7 +100,6 @@ export default function Dashboard() {
               dataIndex: 'quotation_date',
               render: (v) => (v ? dayjs(v).format('DD MMM YYYY') : '—'),
             },
-            { title: 'Status', dataIndex: 'status' },
             {
               title: 'Total',
               dataIndex: 'total',

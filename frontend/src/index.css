@@ -35,4 +35,238 @@
   .app-side .ant-menu-dark .ant-menu-item:hover {
     background: rgba(255, 255, 255, 0.08) !important;
   }
+
+  .items-table {
+    @apply w-full border-collapse text-[13px];
+  }
+
+  .items-table th {
+    @apply whitespace-nowrap border border-slate-200 bg-slate-100 px-2 py-2.5 text-left font-semibold text-slate-800;
+  }
+
+  .items-table-cell {
+    @apply border border-slate-200 px-2 py-1.5 align-middle;
+  }
+
+  .items-table-sub-row {
+    @apply bg-slate-50/80;
+  }
+
+  .generate-report-card.ant-card {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .generate-report-card .ant-card-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
+
+  .tiptap-editor .ProseMirror {
+    outline: none;
+    min-height: 64px;
+    font-family: Inter, Arial, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    color: #0f172a;
+  }
+
+  .tiptap-editor .ProseMirror p {
+    margin: 0;
+  }
+
+  .tiptap-editor .ProseMirror p + p {
+    margin-top: 2px;
+  }
+
+  .tiptap-editor .ProseMirror h1 {
+    font-size: 1.55em;
+    font-weight: 700;
+    margin: 0.4em 0 0.2em;
+  }
+
+  .tiptap-editor .ProseMirror h2 {
+    font-size: 1.3em;
+    font-weight: 700;
+    margin: 0.35em 0 0.15em;
+  }
+
+  .tiptap-editor .ProseMirror h3 {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 0.3em 0 0.1em;
+  }
+
+  .tiptap-editor .ProseMirror table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 0.4em 0;
+  }
+
+  .tiptap-editor .ProseMirror td,
+  .tiptap-editor .ProseMirror th {
+    border: 1px solid #cbd5e1;
+    padding: 0.2em 0.4em;
+    vertical-align: top;
+    word-break: break-word;
+  }
+
+  .tiptap-editor .ProseMirror th {
+    background: #f1f5f9;
+    font-weight: 600;
+  }
+
+  .tiptap-editor .ProseMirror .selectedCell {
+    background: rgba(13, 148, 136, 0.12);
+  }
+
+  .tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+    color: #94a3b8;
+    content: attr(data-placeholder);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  .tiptap-editor .ProseMirror img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* TipTap table column resize (Word-like drag) */
+  .tiptap-editor .ProseMirror .tableWrapper {
+    position: relative;
+    overflow-x: auto;
+    margin: 0.4em 0;
+  }
+
+  .tiptap-editor .ProseMirror .column-resize-handle {
+    position: absolute;
+    right: -2px;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background-color: #0d9488;
+    pointer-events: none;
+    opacity: 0.85;
+  }
+
+  .tiptap-editor .ProseMirror.resize-cursor {
+    cursor: col-resize;
+  }
+
+  .tiptap-editor .ProseMirror td,
+  .tiptap-editor .ProseMirror th {
+    position: relative;
+    min-width: 48px;
+  }
+
+  /* Resizable image selection + align toolbar */
+  .tiptap-editor .resizable-image-wrap {
+    position: relative;
+    line-height: normal;
+    overflow: visible;
+    margin: 28px 0 8px;
+  }
+
+  .tiptap-editor .resizable-image-wrap.is-selected {
+    outline: 1.5px dashed #38bdf8;
+    outline-offset: 3px;
+  }
+
+  .tiptap-editor .image-align-toolbar {
+    position: absolute;
+    left: 50%;
+    top: -34px;
+    z-index: 40;
+    display: flex;
+    gap: 4px;
+    transform: translateX(-50%);
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 4px;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.14);
+    white-space: nowrap;
+    pointer-events: auto;
+  }
+
+  .tiptap-editor .image-resize-handle {
+    position: absolute;
+    z-index: 41;
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid #38bdf8;
+    border-radius: 999px;
+    background: #fff;
+    box-sizing: border-box;
+  }
+
+  .tiptap-editor .handle-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+  .tiptap-editor .handle-ne { top: -5px; right: -5px; cursor: nesw-resize; }
+  .tiptap-editor .handle-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+  .tiptap-editor .handle-se { bottom: -5px; right: -5px; cursor: nwse-resize; }
+  .tiptap-editor .handle-n { top: -5px; left: 50%; margin-left: -4px; cursor: ns-resize; }
+  .tiptap-editor .handle-s { bottom: -5px; left: 50%; margin-left: -4px; cursor: ns-resize; }
+  .tiptap-editor .handle-e { top: 50%; right: -5px; margin-top: -4px; cursor: ew-resize; }
+  .tiptap-editor .handle-w { top: 50%; left: -5px; margin-top: -4px; cursor: ew-resize; }
+
+  /* Report designer white sidebar */
+  .designer-sidebar .designer-section-label {
+    color: #0f766e;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .designer-sidebar .designer-field-label {
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: #64748b;
+  }
+
+  .designer-sidebar .designer-collapse.ant-collapse {
+    background: transparent;
+    border: none;
+  }
+
+  .designer-sidebar .designer-collapse > .ant-collapse-item {
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .designer-sidebar .designer-collapse .ant-collapse-header {
+    color: #0f172a !important;
+    padding: 12px 14px !important;
+    align-items: center !important;
+  }
+
+  .designer-sidebar .designer-collapse .ant-collapse-expand-icon {
+    color: #64748b !important;
+  }
+
+  .designer-sidebar .designer-collapse .ant-collapse-content {
+    background: transparent;
+    border: none;
+  }
+
+  .designer-sidebar .designer-collapse .ant-collapse-content-box {
+    padding: 0 12px 10px !important;
+  }
+
+  .designer-font-dropdown {
+    max-height: 320px;
+  }
+
+  .designer-font-dropdown .ant-select-item-option-disabled {
+    cursor: default !important;
+    opacity: 1 !important;
+    color: #94a3b8 !important;
+    font-size: 11px;
+    border-top: 1px dashed #e2e8f0;
+    margin-top: 4px;
+  }
 }

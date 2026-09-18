@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Form, Input, Modal, Popconfirm, Space, Table, Upload, message,
+  Button, Dropdown, Form, Input, Modal, Popconfirm, Space, Table, Tooltip, Upload, message,
 } from 'antd';
 import {
   PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
@@ -8,11 +8,12 @@ import {
   FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../../config/auth.js';
+import { useAuth } from '../../config/AuthContext.jsx';
 import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
 import BulkReviewModal from '../../Components/BulkReviewModal';
 import { slugCode, slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
-import { datedFilename, downloadRowsExcel, downloadRowsPdf, parseSpreadsheetFile } from '../../utils/spreadsheet';
+import { datedFilename, downloadReportExcel, downloadReportPdf, parseSpreadsheetFile } from '../../utils/spreadsheet';
 
 function pick(row, ...keys) {
   for (const key of keys) {
@@ -55,6 +56,8 @@ function mapSheetToPreview(rawRows, customFields) {
 }
 
 export default function Customers() {
+  const { user } = useAuth();
+  const orgName = user?.organization_name || 'Organization';
   const [allRows, setAllRows] = useState([]);
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -348,16 +351,18 @@ export default function Customers() {
         editingId === record.id
           ? (
             <Space>
-              <Button type="text" icon={<CheckOutlined />} onClick={() => saveEdit(record)} />
-              <Button type="text" icon={<CloseOutlined />} onClick={cancelEdit} />
+              <Tooltip title="Save"><Button type="text" icon={<CheckOutlined />} onClick={() => saveEdit(record)} /></Tooltip>
+              <Tooltip title="Cancel"><Button type="text" icon={<CloseOutlined />} onClick={cancelEdit} /></Tooltip>
             </Space>
           )
           : (
             <Space>
-              <Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} />
-              <Popconfirm title="Delete customer?" onConfirm={() => remove(record.id)}>
-                <Button type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
+              <Tooltip title="Edit"><Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} /></Tooltip>
+              <Tooltip title="Delete">
+                <Popconfirm title="Delete customer?" onConfirm={() => remove(record.id)}>
+                  <Button type="text" danger icon={<DeleteOutlined />} />
+                </Popconfirm>
+              </Tooltip>
             </Space>
           )
       ),
@@ -389,13 +394,21 @@ export default function Customers() {
                     key: 'excel',
                     icon: <FileExcelOutlined />,
                     label: 'Download as Excel',
-                    onClick: () => downloadRowsExcel(exportRows(), datedFilename('customers', 'xlsx')),
+                    onClick: () => downloadReportExcel(
+                      exportRows(),
+                      datedFilename('customers', 'xls'),
+                      { organizationName: orgName, title: 'Customers Report' },
+                    ),
                   },
                   {
                     key: 'pdf',
                     icon: <FilePdfOutlined />,
                     label: 'Download as PDF',
-                    onClick: () => downloadRowsPdf(exportRows(), datedFilename('customers', 'pdf'), 'Customers'),
+                    onClick: () => downloadReportPdf(
+                      exportRows(),
+                      datedFilename('customers', 'pdf'),
+                      { organizationName: orgName, title: 'Customers Report' },
+                    ),
                   },
                 ],
               }}

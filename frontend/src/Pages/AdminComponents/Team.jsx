@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Typography, message,
+  Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tooltip, Typography, message,
 } from 'antd';
 import {
   PlusOutlined, DeleteOutlined, EditOutlined, CheckOutlined, CloseOutlined, ColumnHeightOutlined,
@@ -230,10 +230,16 @@ export default function Team() {
           )
           : (
             <Space>
-              <Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} />
-              <Popconfirm title="Delete user?" onConfirm={() => remove(record.id)}>
-                <Button type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
+              <Tooltip title="Edit user">
+                <Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} />
+              </Tooltip>
+              {record.role_name !== 'ADMIN' && (
+                <Tooltip title="Delete user">
+                  <Popconfirm title="Delete user?" onConfirm={() => remove(record.id)}>
+                    <Button type="text" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </Tooltip>
+              )}
             </Space>
           )
       ),

@@ -42,7 +42,7 @@ function AdminShell() {
           { key: 'team', icon: <TeamOutlined />, label: 'Team' },
           { key: 'customers', icon: <UserOutlined />, label: 'Customers' },
           { key: 'activities', icon: <AppstoreOutlined />, label: 'Activities' },
-          { key: 'templates', icon: <FileTextOutlined />, label: 'Report Templates' },
+          { key: 'templates', icon: <FileTextOutlined />, label: 'Report Design' },
           { key: 'configuration', icon: <BankOutlined />, label: 'Configuration' },
         ]}
         onMenuClick={({ key }) => {
@@ -50,7 +50,7 @@ function AdminShell() {
           else navigate(`/admin/${key}`);
         }}
       />
-      <Content className="min-h-0 flex-1 overflow-hidden bg-slate-100 p-4 font-sans">
+      <Content className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-4 font-sans">
         <Outlet />
       </Content>
     </Layout>

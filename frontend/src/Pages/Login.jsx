@@ -99,7 +99,7 @@ export default function Login() {
             <Form form={loginForm} layout="vertical" onFinish={onLogin} requiredMark="optional">
               <Form.Item
                 name="email"
-                label="Work email"
+                label="Email"
                 rules={[
                   { required: true, message: 'Enter your email' },
                   { type: 'email', message: 'Enter a valid email' },
