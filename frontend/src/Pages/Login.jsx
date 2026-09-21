@@ -146,7 +146,7 @@ export default function Login() {
                 className="font-semibold text-teal-600 hover:text-teal-700"
                 onClick={showSignup}
               >
-                Create a workspace
+                Sign up
               </button>
             </p>
           </motion.div>
@@ -160,7 +160,7 @@ export default function Login() {
             className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
           >
             <Typography.Title level={3} className="!mb-1 !font-sans !text-slate-800">
-              Create a workspace
+              Sign up
             </Typography.Title>
             <Typography.Text className="mb-5 block text-slate-500">
               Register your organization, then set up the admin account.

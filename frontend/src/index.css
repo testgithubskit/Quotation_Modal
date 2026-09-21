@@ -52,6 +52,40 @@
     @apply bg-slate-50/80;
   }
 
+  .items-total-pill {
+    @apply rounded px-2 py-1.5 text-center text-[13px] font-semibold text-white;
+    background: #1d4ed8;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .items-table-total-row td {
+    background: #f1f5f9 !important;
+    border-color: #e2e8f0 !important;
+    color: #0f172a !important;
+    font-weight: 700;
+    padding: 10px 8px !important;
+  }
+
+  /* Designer placeholder chips (instead of {{brackets}}) */
+  .tiptap-editor .ProseMirror .report-placeholder-chip,
+  .report-placeholder-chip {
+    display: inline-block;
+    background: #ebf5ff;
+    border: 1px dashed #7dd3fc;
+    color: #0369a1;
+    padding: 1px 7px;
+    border-radius: 3px;
+    font-size: 0.95em;
+    line-height: 1.45;
+    white-space: nowrap;
+    user-select: none;
+    vertical-align: baseline;
+    cursor: default;
+  }
+
   .generate-report-card.ant-card {
     display: flex;
     flex-direction: column;
@@ -108,14 +142,15 @@
 
   .tiptap-editor .ProseMirror td,
   .tiptap-editor .ProseMirror th {
-    border: 1px solid #cbd5e1;
+    border: 1px solid #000;
     padding: 0.2em 0.4em;
     vertical-align: top;
     word-break: break-word;
+    background: #fff;
   }
 
   .tiptap-editor .ProseMirror th {
-    background: #f1f5f9;
+    background: #fff;
     font-weight: 600;
   }
 
@@ -169,7 +204,18 @@
     position: relative;
     line-height: normal;
     overflow: visible;
-    margin: 28px 0 8px;
+    margin: 8px 0;
+    cursor: grab;
+  }
+
+  .tiptap-editor .resizable-image-wrap.is-fit-cell {
+    margin: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .tiptap-editor .resizable-image-wrap:active {
+    cursor: grabbing;
   }
 
   .tiptap-editor .resizable-image-wrap.is-selected {
@@ -177,21 +223,22 @@
     outline-offset: 3px;
   }
 
-  .tiptap-editor .image-align-toolbar {
-    position: absolute;
-    left: 50%;
-    top: -34px;
-    z-index: 40;
+  /* Portaled above/below image so it is never clipped by table cells */
+  .image-align-toolbar-portal {
     display: flex;
-    gap: 4px;
-    transform: translateX(-50%);
-    border: 1px solid #cbd5e1;
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 4px;
-    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.14);
+    align-items: center;
+    gap: 2px;
+    border: 1px solid #94a3b8;
+    border-radius: 6px;
+    background: #f8fafc;
+    padding: 3px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.12);
     white-space: nowrap;
     pointer-events: auto;
+  }
+
+  .tiptap-editor .image-align-toolbar {
+    display: none;
   }
 
   .tiptap-editor .image-resize-handle {
@@ -268,5 +315,77 @@
     font-size: 11px;
     border-top: 1px dashed #e2e8f0;
     margin-top: 4px;
+  }
+
+  /* Word-like selection format bar */
+  .selection-format-toolbar {
+    display: block;
+    min-width: 360px;
+    max-width: min(520px, calc(100vw - 24px));
+    padding: 10px 12px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
+  }
+
+  /* Table row/column grips (+ add, × delete) */
+  .table-grip-ui {
+    pointer-events: auto;
+  }
+
+  .table-grip-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    font-size: 12px;
+    box-shadow: 0 1px 4px rgba(15, 23, 42, 0.15);
+  }
+
+  .table-grip-add {
+    background: #f8fafc;
+    color: #64748b;
+    border-color: #cbd5e1;
+  }
+
+  .table-grip-add:hover {
+    background: #e2e8f0;
+    color: #334155;
+  }
+
+  .table-grip-del {
+    background: #ef4444;
+    color: #fff;
+    border-color: #ef4444;
+    border-radius: 4px;
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+  }
+
+  .table-grip-del:hover {
+    background: #dc2626;
+  }
+
+  .table-grip-line-h,
+  .table-grip-line-v {
+    display: none;
+  }
+
+  /* Generated report preview — HAL-style black grid, no grey header */
+  .report-preview-body table,
+  .report-preview-body table td,
+  .report-preview-body table th {
+    border: 1px solid #000 !important;
+    background: #fff !important;
+  }
+
+  .report-preview-body table th {
+    font-weight: 600;
   }
 }

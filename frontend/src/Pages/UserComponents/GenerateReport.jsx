@@ -36,7 +36,7 @@ function emptyItem() {
     sampleActivity: '',
     description: '',
     specification: '',
-    qty: 1,
+    qty: 0,
     unit: 'Nos',
     unitRate: 0,
     customFields: {},
@@ -115,8 +115,9 @@ export default function GenerateReport() {
   const activityOptions = useMemo(
     () => activities.map((a) => ({
       value: a.id,
-      label: a.name || a.code || 'Activity',
+      label: a.code ? `${a.code} — ${a.name}` : (a.name || 'Activity'),
       code: a.code || '',
+      name: a.name || '',
     })),
     [activities],
   );
@@ -128,6 +129,26 @@ export default function GenerateReport() {
     })),
     [customers],
   );
+
+  const itemsTotals = useMemo(() => {
+    let qty = 0;
+    let cost = 0;
+    items.forEach((item) => {
+      const q = Number(item.qty || 0);
+      const rate = Number(item.unitRate || 0);
+      qty += q;
+      cost += q * rate;
+      (item.subActivities || []).forEach((s) => {
+        const sq = Number(s.qty || 0);
+        const sr = Number(s.unitRate || 0);
+        qty += sq;
+        cost += sq * sr;
+      });
+    });
+    return { qty, cost };
+  }, [items]);
+
+  const itemsLabelColSpan = 4 + activityCustomFields.length;
 
   const findActivity = (id) => activities.find((a) => a.id === id);
   const findCustomer = (id) => customers.find((c) => c.id === id);
@@ -174,6 +195,7 @@ export default function GenerateReport() {
       sampleActivity: a.name || '',
       description: a.description || a.name || '',
       specification: a.name || '',
+      qty: 1,
       unit: a.unit || 'Nos',
       unitRate: Number(a.unit_price || 0),
       customFields: pickCustomActivityFields(a),
@@ -188,6 +210,7 @@ export default function GenerateReport() {
       sampleActivity: a.name || '',
       description: a.description || a.name || '',
       specification: a.name || '',
+      qty: 1,
       unit: a.unit || 'Nos',
       unitRate: Number(a.unit_price || 0),
       customFields: pickCustomActivityFields(a),
@@ -230,7 +253,7 @@ export default function GenerateReport() {
       sampleActivity: '',
       description: '',
       specification: '',
-      qty: 1,
+      qty: 0,
       unit: 'Nos',
       unitRate: 0,
       customFields: {},
@@ -280,7 +303,7 @@ export default function GenerateReport() {
       lines.push({
         activity_id: r.activityId || null,
         description: r.description || r.sampleActivity || 'Item',
-        quantity: Number(r.qty || 1),
+        quantity: Number(r.qty ?? 0),
         unit: r.unit || 'Nos',
         unit_price: Number(r.unitRate || 0),
         discount: 0,
@@ -297,7 +320,7 @@ export default function GenerateReport() {
           lines.push({
             activity_id: s.activityId || null,
             description: s.description || s.sampleActivity || 'Sub item',
-            quantity: Number(s.qty || 1),
+            quantity: Number(s.qty ?? 0),
             unit: s.unit || 'Nos',
             unit_price: Number(s.unitRate || 0),
             discount: 0,
@@ -493,8 +516,8 @@ export default function GenerateReport() {
             placeholder="Qty"
             value={row.qty}
             onChange={(v) => (isSub
-              ? setSubField(parentKey, row.key, { qty: v || 1 })
-              : setItemField(row.key, { qty: v || 1 }))}
+              ? setSubField(parentKey, row.key, { qty: v ?? 0 })
+              : setItemField(row.key, { qty: v ?? 0 }))}
           />
         </td>
         <td className="items-table-cell w-[110px]">
@@ -727,6 +750,25 @@ export default function GenerateReport() {
                   return rows;
                 })}
               </tbody>
+              <tfoot>
+                <tr className="items-table-total-row">
+                  <td
+                    className="items-table-cell font-semibold"
+                    colSpan={itemsLabelColSpan}
+                  >
+                    Total
+                  </td>
+                  <td className="items-table-cell text-center font-semibold">
+                    {itemsTotals.qty}
+                  </td>
+                  <td className="items-table-cell" />
+                  <td className="items-table-cell" />
+                  <td className="items-table-cell text-center font-semibold">
+                    ₹{itemsTotals.cost.toLocaleString('en-IN')}
+                  </td>
+                  <td className="items-table-cell" />
+                </tr>
+              </tfoot>
             </table>
           </div>
 

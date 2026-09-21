@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Modal, Popconfirm, Space, Table, Tooltip, message } from 'antd';
 import {
-  DeleteOutlined, EyeOutlined, FileExcelOutlined, FilePdfOutlined,
+  CloseOutlined, DeleteOutlined, DownloadOutlined, EyeOutlined,
+  FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../config/auth.js';
@@ -56,7 +57,7 @@ function ReportPreviewContent({ report, customer, template, organization }) {
   return (
     <div className="max-h-[70vh] overflow-auto bg-slate-200 p-4">
       <div
-        className="mx-auto bg-white text-slate-900 shadow-md"
+        className="report-preview-body mx-auto bg-white text-slate-900 shadow-md"
         style={{
           width: Math.min(doc.width, 780),
           minHeight: doc.height * (Math.min(doc.width, 780) / doc.width),
@@ -102,63 +103,6 @@ async function loadReportContext(record, customersById, templatesById) {
   };
 }
 
-function showReportDetail(ctx) {
-  const { report, customer, template, organization } = ctx;
-  const orgName = organization?.name || organization?.organization_name || 'Organization';
-
-  Modal.info({
-    title: report.quotation_number || 'Report',
-    width: 860,
-    icon: null,
-    okText: 'Close',
-    content: (
-      <ReportPreviewContent
-        report={report}
-        customer={customer}
-        template={template}
-        organization={organization}
-      />
-    ),
-    footer: (_, { OkBtn }) => (
-      <Space wrap>
-        <Button
-          icon={<FileExcelOutlined />}
-          onClick={() => {
-            try {
-              downloadQuotationExcel(report, { organizationName: orgName });
-              message.success('Excel downloaded');
-            } catch (error) {
-              message.error(error?.message || 'Excel download failed');
-            }
-          }}
-        >
-          Excel
-        </Button>
-        <Button
-          type="primary"
-          icon={<FilePdfOutlined />}
-          className="!bg-teal-600 hover:!bg-teal-700"
-          onClick={() => {
-            try {
-              downloadQuotationPdfViaChromium({
-                report,
-                customer,
-                template,
-                organization,
-              });
-            } catch (error) {
-              message.error(error?.message || 'PDF download failed');
-            }
-          }}
-        >
-          PDF
-        </Button>
-        <OkBtn />
-      </Space>
-    ),
-  });
-}
-
 export default function GeneratedReportsTable({ active = true }) {
   const [rows, setRows] = useState([]);
   const [customersById, setCustomersById] = useState({});
@@ -168,6 +112,9 @@ export default function GeneratedReportsTable({ active = true }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [busyId, setBusyId] = useState(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewCtx, setPreviewCtx] = useState(null);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -255,6 +202,23 @@ export default function GeneratedReportsTable({ active = true }) {
     }
   };
 
+  const closePreview = () => {
+    setPreviewOpen(false);
+    setPreviewCtx(null);
+  };
+
+  const downloadPdf = async (ctx) => {
+    setPdfDownloading(true);
+    try {
+      await downloadQuotationPdfViaChromium(ctx);
+      message.success('PDF downloaded');
+    } catch (error) {
+      message.error(error?.message || 'PDF download failed');
+    } finally {
+      setPdfDownloading(false);
+    }
+  };
+
   const filtered = useMemo(
     () => rows.filter((r) => recordMatchesSearch(r, search, [
       'quotation_number',
@@ -264,6 +228,8 @@ export default function GeneratedReportsTable({ active = true }) {
     ])),
     [rows, search, customersById, templatesById],
   );
+
+  const previewReport = previewCtx?.report;
 
   return (
     <div className="space-y-3">
@@ -314,12 +280,15 @@ export default function GeneratedReportsTable({ active = true }) {
               width: 180,
               render: (_, record) => (
                 <Space size={0}>
-                  <Tooltip title="View">
+                  <Tooltip title="Preview">
                     <Button
                       type="text"
                       icon={<EyeOutlined />}
                       loading={busyId === record.id}
-                      onClick={() => withContext(record, (ctx) => showReportDetail(ctx))}
+                      onClick={() => withContext(record, (ctx) => {
+                        setPreviewCtx(ctx);
+                        setPreviewOpen(true);
+                      })}
                     />
                   </Tooltip>
                   <Tooltip title="Download Excel">
@@ -327,8 +296,9 @@ export default function GeneratedReportsTable({ active = true }) {
                       type="text"
                       icon={<FileExcelOutlined />}
                       loading={busyId === record.id}
-                      onClick={() => withContext(record, ({ report, organization }) => {
+                      onClick={() => withContext(record, ({ report, customer, organization }) => {
                         downloadQuotationExcel(report, {
+                          customer,
                           organizationName:
                             organization?.name || organization?.organization_name || 'Organization',
                         });
@@ -336,14 +306,12 @@ export default function GeneratedReportsTable({ active = true }) {
                       })}
                     />
                   </Tooltip>
-                  <Tooltip title="Download PDF (Chromium)">
+                  <Tooltip title="Download PDF">
                     <Button
                       type="text"
                       icon={<FilePdfOutlined />}
                       loading={busyId === record.id}
-                      onClick={() => withContext(record, (ctx) => {
-                        downloadQuotationPdfViaChromium(ctx);
-                      })}
+                      onClick={() => withContext(record, (ctx) => downloadPdf(ctx))}
                     />
                   </Tooltip>
                   <Popconfirm title="Delete report?" onConfirm={() => remove(record.id)}>
@@ -355,6 +323,40 @@ export default function GeneratedReportsTable({ active = true }) {
           ]}
         />
       </div>
+
+      <Modal
+        open={previewOpen}
+        onCancel={closePreview}
+        title={previewReport?.quotation_number || 'Report preview'}
+        width={900}
+        centered
+        destroyOnClose
+        closable
+        closeIcon={<CloseOutlined />}
+        footer={(
+          <div className="flex justify-end gap-2">
+            <Button onClick={closePreview}>Close</Button>
+            <Button
+              type="primary"
+              icon={<DownloadOutlined />}
+              loading={pdfDownloading}
+              className="!bg-teal-600 hover:!bg-teal-700"
+              onClick={() => previewCtx && downloadPdf(previewCtx)}
+            >
+              Download PDF
+            </Button>
+          </div>
+        )}
+      >
+        {previewCtx ? (
+          <ReportPreviewContent
+            report={previewCtx.report}
+            customer={previewCtx.customer}
+            template={previewCtx.template}
+            organization={previewCtx.organization}
+          />
+        ) : null}
+      </Modal>
     </div>
   );
 }

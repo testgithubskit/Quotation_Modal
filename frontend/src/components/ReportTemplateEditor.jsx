@@ -12,7 +12,7 @@ import FontFamily from '@tiptap/extension-font-family';
 import { Highlight } from '@tiptap/extension-highlight';
 import Placeholder from '@tiptap/extension-placeholder';
 import {
-  Button, Collapse, Dropdown, Input, InputNumber, Select, Space, Switch, Tooltip, message,
+  Button, Collapse, Dropdown, Input, InputNumber, Modal, Select, Space, Switch, Tooltip, message,
 } from 'antd';
 import {
   ArrowLeftOutlined, SaveOutlined, BoldOutlined, ItalicOutlined, UnderlineOutlined,
@@ -25,7 +25,7 @@ import {
   VerticalAlignMiddleOutlined, VerticalAlignBottomOutlined, PictureOutlined,
   BorderOutlined, BorderTopOutlined, BorderBottomOutlined, BorderLeftOutlined,
   BorderRightOutlined, ColumnWidthOutlined, DownloadOutlined, PrinterOutlined,
-  FilePdfOutlined, FileExcelOutlined,
+  FilePdfOutlined, FileExcelOutlined, CloseOutlined,
 } from '@ant-design/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { jsPDF } from 'jspdf';
@@ -41,6 +41,9 @@ import {
 } from '../utils/reportPlaceholders.js';
 import { datedFilename, downloadRowsExcel } from '../utils/spreadsheet.js';
 import { ResizableImage } from './tiptap/ResizableImage.jsx';
+import TableGripControls from './tiptap/TableGripControls.jsx';
+import SelectionFormatToolbar from './tiptap/SelectionFormatToolbar.jsx';
+import { ReportPlaceholder, hydratePlaceholderChips } from './tiptap/ReportPlaceholder.js';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -61,8 +64,10 @@ const FontSize = Extension.create({
   },
   addCommands() {
     return {
-      setFontSize: (fontSize) => ({ chain }) => chain().setMark('textStyle', { fontSize }).run(),
-      unsetFontSize: () => ({ chain }) => chain().setMark('textStyle', { fontSize: null }).removeEmptyTextStyle().run(),
+      setFontSize: (fontSize) => ({ chain }) => chain().setMark('textStyle', { fontSize }),
+      unsetFontSize: () => ({ chain }) => chain()
+        .setMark('textStyle', { fontSize: null })
+        .removeEmptyTextStyle(),
     };
   },
 });
@@ -117,6 +122,7 @@ const EDITOR_EXTENSIONS = (placeholder) => [
   CustomTableHeader,
   CustomTableCell,
   ResizableImage,
+  ReportPlaceholder,
   Placeholder.configure({ placeholder }),
 ];
 
@@ -142,10 +148,15 @@ function ToolBtn({ title, active, danger, onClick, icon, disabled }) {
   );
 }
 
-function SectionEditor({ label, editor, active, onFocus }) {
+function SectionEditor({ label, editor, active, onFocus, className = '', pinned }) {
   return (
     <div
-      className={`relative border-b border-dashed border-teal-200/70 ${active ? 'ring-1 ring-teal-400/40' : ''}`}
+      className={[
+        'relative border-b border-dashed border-teal-200/70',
+        active ? 'ring-1 ring-teal-400/40' : '',
+        pinned ? 'mt-auto border-b-0 border-t border-dashed border-teal-200/70' : '',
+        className,
+      ].filter(Boolean).join(' ')}
       onMouseDown={onFocus}
     >
       <div className="pointer-events-none absolute left-2 top-1 z-10 rounded bg-teal-700/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
@@ -197,10 +208,18 @@ function DesignerSidebar({
   placeholders,
   onInsertPlaceholder,
   onAddPlaceholder,
+  onRemovePlaceholder,
   onUploadImage,
+  selectionTick = 0,
 }) {
   const fileRef = useRef(null);
+  const [addingPh, setAddingPh] = useState(false);
+  const [phDraft, setPhDraft] = useState('');
   const inTable = Boolean(editor?.isActive('table'));
+  // Re-read mark attrs whenever the editor selection/content updates
+  void selectionTick;
+  const textStyle = editor?.getAttributes('textStyle') || {};
+  const highlightColor = editor?.getAttributes('highlight')?.color || '#fef08a';
 
   const setCellAttr = (key, value) => {
     if (!editor) return;
@@ -210,6 +229,14 @@ function DesignerSidebar({
       .updateAttributes('tableCell', { [key]: value })
       .updateAttributes('tableHeader', { [key]: value })
       .run();
+  };
+
+  const submitPlaceholder = () => {
+    const ok = onAddPlaceholder?.(phDraft);
+    if (ok !== false) {
+      setPhDraft('');
+      setAddingPh(false);
+    }
   };
 
   return (
@@ -227,30 +254,82 @@ function DesignerSidebar({
                 <Tooltip title="Add custom placeholder">
                   <button
                     type="button"
-                    className="inline-flex h-6 w-6 items-center justify-center rounded text-slate-500 hover:bg-slate-100 hover:text-teal-700"
+                    className="inline-flex h-6 items-center justify-center gap-0.5 rounded bg-teal-600 px-1.5 text-white hover:bg-teal-500"
                     onClick={(e) => {
                       e.stopPropagation();
-                      onAddPlaceholder();
+                      setAddingPh(true);
                     }}
                   >
-                    <PlusOutlined />
+                    <PlusOutlined className="text-[11px]" />
                   </button>
                 </Tooltip>
               </div>
             ),
             children: (
-              <div className="grid grid-cols-2 gap-1.5 px-1 pb-2">
-                {placeholders.map((p) => (
-                  <button
-                    key={p.token}
-                    type="button"
-                    className="rounded-md border border-slate-200 bg-slate-50 px-2 py-2 text-left text-[11px] font-medium text-slate-700 transition hover:border-teal-400 hover:bg-teal-50 hover:text-teal-800"
-                    onClick={() => onInsertPlaceholder(p.token)}
-                    title={p.token}
-                  >
-                    {p.label}
-                  </button>
-                ))}
+              <div className="space-y-2 px-1 pb-2">
+                {addingPh ? (
+                  <div className="flex gap-1">
+                    <Input
+                      size="small"
+                      autoFocus
+                      placeholder="Name (e.g. Approved By)"
+                      value={phDraft}
+                      onChange={(e) => setPhDraft(e.target.value)}
+                      onPressEnter={submitPlaceholder}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          setAddingPh(false);
+                          setPhDraft('');
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded bg-teal-600 text-white hover:bg-teal-500"
+                      title="Add"
+                      onClick={submitPlaceholder}
+                    >
+                      <PlusOutlined />
+                    </button>
+                  </div>
+                ) : null}
+                <div className="grid grid-cols-2 gap-1.5">
+                  {placeholders.map((p) => {
+                    const isCustom = p.custom === true;
+                    return (
+                      <div
+                        key={p.token}
+                        className={`group relative flex items-stretch overflow-hidden rounded-md border text-left text-[11px] font-medium transition ${
+                          isCustom
+                            ? 'border-teal-200 bg-teal-50 text-teal-900'
+                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-teal-400 hover:bg-teal-50 hover:text-teal-800'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 truncate px-2 py-2 text-left"
+                          onClick={() => onInsertPlaceholder(p)}
+                          title={p.token}
+                        >
+                          {p.label}
+                        </button>
+                        {isCustom ? (
+                          <button
+                            type="button"
+                            className="inline-flex w-6 shrink-0 items-center justify-center border-l border-teal-200 text-red-500 hover:bg-red-50"
+                            title="Delete placeholder"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onRemovePlaceholder?.(p.token);
+                            }}
+                          >
+                            <CloseOutlined className="text-[10px]" />
+                          </button>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ),
           },
@@ -332,29 +411,6 @@ function DesignerSidebar({
                     />
                   </div>
                 </div>
-                <div>
-                  <div className="designer-field-label">Default font</div>
-                  <FontSelect
-                    className="w-full"
-                    value={pageSettings.fontFamily || ''}
-                    onChange={(fontFamily) => {
-                      setPageSettings((s) => ({ ...s, fontFamily }));
-                      if (fontFamily && editor) editor.chain().focus().setFontFamily(fontFamily).run();
-                    }}
-                  />
-                </div>
-                <div>
-                  <div className="designer-field-label">Default size</div>
-                  <Select
-                    className="w-full"
-                    value={pageSettings.fontSize || '12px'}
-                    options={FONT_SIZE_OPTIONS}
-                    onChange={(fontSize) => {
-                      setPageSettings((s) => ({ ...s, fontSize }));
-                      if (editor) editor.chain().focus().setFontSize(fontSize).run();
-                    }}
-                  />
-                </div>
                 <div className="flex items-center justify-between pt-1">
                   <span className="text-xs text-slate-600">Star as default template</span>
                   <Switch checked={isDefault} onChange={setIsDefault} size="small" />
@@ -400,21 +456,35 @@ function DesignerSidebar({
             key: 'type',
             label: <span className="designer-section-label">Typography</span>,
             children: (
-              <div className="space-y-2 px-1 pb-2">
+              <div className="space-y-2 px-1 pb-2" key={`typo-${selectionTick}`}>
                 <div className="grid grid-cols-2 gap-1.5">
-                  <FontSelect
-                    size="small"
-                    className="w-full"
-                    placeholder="Font"
-                    onChange={(v) => v && editor?.chain().focus().setFontFamily(v).run()}
-                  />
-                  <Select
-                    size="small"
-                    className="w-full"
-                    placeholder="Size"
-                    options={FONT_SIZE_OPTIONS}
-                    onChange={(v) => editor?.chain().focus().setFontSize(v).run()}
-                  />
+                  <div onMouseDown={(e) => e.preventDefault()}>
+                    <FontSelect
+                      size="small"
+                      className="w-full"
+                      placeholder="Font"
+                      value={textStyle.fontFamily || undefined}
+                      onChange={(v) => {
+                        if (!v || !editor) return;
+                        editor.chain().focus().setFontFamily(v).run();
+                      }}
+                    />
+                  </div>
+                  <div onMouseDown={(e) => e.preventDefault()}>
+                    <Select
+                      size="small"
+                      className="w-full"
+                      placeholder="Size"
+                      showSearch
+                      optionFilterProp="label"
+                      value={textStyle.fontSize || undefined}
+                      options={FONT_SIZE_OPTIONS}
+                      onChange={(v) => {
+                        if (!v || !editor) return;
+                        editor.chain().focus().setFontSize(v).run();
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-1 rounded-md bg-slate-50 p-1">
                   <ToolBtn title="Bold" active={editor?.isActive('bold')} icon={<BoldOutlined />} onClick={() => editor?.chain().focus().toggleBold().run()} />
@@ -427,18 +497,28 @@ function DesignerSidebar({
                   <ToolBtn title="Align center" active={editor?.isActive({ textAlign: 'center' })} icon={<AlignCenterOutlined />} onClick={() => editor?.chain().focus().setTextAlign('center').run()} />
                   <ToolBtn title="Align right" active={editor?.isActive({ textAlign: 'right' })} icon={<AlignRightOutlined />} onClick={() => editor?.chain().focus().setTextAlign('right').run()} />
                   <ToolBtn title="Justify" active={editor?.isActive({ textAlign: 'justify' })} icon={<ColumnWidthOutlined />} onClick={() => editor?.chain().focus().setTextAlign('justify').run()} />
-                  <ToolBtn title="Clear formatting" icon={<ClearOutlined />} onClick={() => editor?.chain().focus().clearNodes().unsetAllMarks().run()} />
+                  <ToolBtn title="Clear formatting" icon={<ClearOutlined />} onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()} />
                 </div>
                 <div className="grid grid-cols-2 gap-1.5">
                   <label className="flex cursor-pointer items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
                     <FontColorsOutlined />
                     Font color
-                    <input type="color" className="ml-auto h-5 w-5 cursor-pointer border-0 bg-transparent p-0" onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()} />
+                    <input
+                      type="color"
+                      className="ml-auto h-5 w-5 cursor-pointer border-0 bg-transparent p-0"
+                      value={textStyle.color || '#000000'}
+                      onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
+                    />
                   </label>
                   <label className="flex cursor-pointer items-center gap-2 rounded-md bg-slate-50 px-2 py-1.5 text-xs text-slate-700">
                     <BgColorsOutlined />
                     Highlight
-                    <input type="color" className="ml-auto h-5 w-5 cursor-pointer border-0 bg-transparent p-0" defaultValue="#fef08a" onChange={(e) => editor?.chain().focus().toggleHighlight({ color: e.target.value }).run()} />
+                    <input
+                      type="color"
+                      className="ml-auto h-5 w-5 cursor-pointer border-0 bg-transparent p-0"
+                      value={highlightColor}
+                      onChange={(e) => editor?.chain().focus().toggleHighlight({ color: e.target.value }).run()}
+                    />
                   </label>
                 </div>
               </div>
@@ -470,10 +550,10 @@ function DesignerSidebar({
                 <div className="flex flex-wrap gap-1 rounded-md bg-slate-50 p-1">
                   <ToolBtn title="Add row above" disabled={!inTable} icon={<InsertRowAboveOutlined />} onClick={() => editor?.chain().focus().addRowBefore().run()} />
                   <ToolBtn title="Add row below" disabled={!inTable} icon={<InsertRowBelowOutlined />} onClick={() => editor?.chain().focus().addRowAfter().run()} />
-                  <ToolBtn title="Delete row" danger disabled={!inTable} icon={<DeleteOutlined />} onClick={() => editor?.chain().focus().deleteRow().run()} />
+                  <ToolBtn title="Delete row" danger disabled={!inTable} icon={<CloseOutlined />} onClick={() => editor?.chain().focus().deleteRow().run()} />
                   <ToolBtn title="Add column left" disabled={!inTable} icon={<InsertRowLeftOutlined />} onClick={() => editor?.chain().focus().addColumnBefore().run()} />
                   <ToolBtn title="Add column right" disabled={!inTable} icon={<InsertRowRightOutlined />} onClick={() => editor?.chain().focus().addColumnAfter().run()} />
-                  <ToolBtn title="Delete column" danger disabled={!inTable} icon={<DeleteOutlined />} onClick={() => editor?.chain().focus().deleteColumn().run()} />
+                  <ToolBtn title="Delete column" danger disabled={!inTable} icon={<CloseOutlined />} onClick={() => editor?.chain().focus().deleteColumn().run()} />
                   <ToolBtn title="Merge cells" disabled={!inTable} icon={<MergeCellsOutlined />} onClick={() => editor?.chain().focus().mergeCells().run()} />
                   <ToolBtn title="Split cell" disabled={!inTable} icon={<SplitCellsOutlined />} onClick={() => editor?.chain().focus().splitCell().run()} />
                 </div>
@@ -533,8 +613,12 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
   const [activeSection, setActiveSection] = useState('header');
   const [existingId, setExistingId] = useState(templateId);
   const [placeholders, setPlaceholders] = useState(REPORT_PLACEHOLDERS);
-  const [, setTick] = useState(0);
-  const refresh = () => setTick((t) => t + 1);
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [baselineNonce, setBaselineNonce] = useState(0);
+  const [selectionTick, setSelectionTick] = useState(0);
+  const refresh = () => setSelectionTick((t) => t + 1);
+  const snapshotRef = useRef('');
+  const baselineArmedRef = useRef(false);
 
   const headerEditor = useEditor({
     extensions: EDITOR_EXTENSIONS('Header — click placeholders to insert…'),
@@ -564,11 +648,38 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
       ? footerEditor
       : bodyEditor;
 
+  const buildSnapshot = () => JSON.stringify({
+    name: name.trim(),
+    description: description || '',
+    isDefault: Boolean(isDefault),
+    pageSettings,
+    header: headerEditor?.getHTML() || '',
+    body: bodyEditor?.getHTML() || '',
+    footer: footerEditor?.getHTML() || '',
+    placeholders: placeholders.map((p) => p.token),
+  });
+
+  const takeSnapshot = () => {
+    snapshotRef.current = buildSnapshot();
+    baselineArmedRef.current = true;
+  };
+
+  const isDirty = () => {
+    if (!baselineArmedRef.current || !snapshotRef.current) return false;
+    return buildSnapshot() !== snapshotRef.current;
+  };
+
   useEffect(() => {
-    if (!templateId) return undefined;
+    if (!templateId) {
+      if (headerEditor && bodyEditor && footerEditor) {
+        setBaselineNonce((n) => n + 1);
+      }
+      return undefined;
+    }
     let cancelled = false;
     (async () => {
       setLoading(true);
+      baselineArmedRef.current = false;
       try {
         const data = await api.get(`/quotation-templates/${templateId}`).then((r) => r.data);
         if (cancelled) return;
@@ -588,15 +699,34 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
           fontSize: td.fontSize || prev.fontSize,
         }));
         if (Array.isArray(td.customPlaceholders) && td.customPlaceholders.length) {
-          setPlaceholders([...REPORT_PLACEHOLDERS, ...td.customPlaceholders]);
+          setPlaceholders([
+            ...REPORT_PLACEHOLDERS,
+            ...td.customPlaceholders.map((p) => ({ ...p, custom: true })),
+          ]);
         }
-        if (td.headerHtml && headerEditor) headerEditor.commands.setContent(td.headerHtml);
-        else if (td.headerText && headerEditor) {
+        if (td.headerHtml && headerEditor) {
+          headerEditor.commands.setContent(hydratePlaceholderChips(td.headerHtml, [
+            ...REPORT_PLACEHOLDERS,
+            ...(td.customPlaceholders || []),
+          ]));
+        } else if (td.headerText && headerEditor) {
           headerEditor.commands.setContent(`<p style="text-align:center"><strong>${td.headerText}</strong></p>`);
         }
-        if (td.bodyHtml && bodyEditor) bodyEditor.commands.setContent(td.bodyHtml);
-        if (td.footerHtml && footerEditor) footerEditor.commands.setContent(td.footerHtml);
-        else if (td.footerText && footerEditor) footerEditor.commands.setContent(`<p>${td.footerText}</p>`);
+        if (td.bodyHtml && bodyEditor) {
+          bodyEditor.commands.setContent(hydratePlaceholderChips(td.bodyHtml, [
+            ...REPORT_PLACEHOLDERS,
+            ...(td.customPlaceholders || []),
+          ]));
+        }
+        if (td.footerHtml && footerEditor) {
+          footerEditor.commands.setContent(hydratePlaceholderChips(td.footerHtml, [
+            ...REPORT_PLACEHOLDERS,
+            ...(td.customPlaceholders || []),
+          ]));
+        } else if (td.footerText && footerEditor) {
+          footerEditor.commands.setContent(`<p>${td.footerText}</p>`);
+        }
+        if (!cancelled) setBaselineNonce((n) => n + 1);
       } catch (error) {
         if (!cancelled) message.error(getApiErrorMessage(error, 'Failed to load template'));
       } finally {
@@ -606,25 +736,60 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, headerEditor, bodyEditor, footerEditor]);
+
+  // After load/create state settles, lock a clean snapshot
+  useEffect(() => {
+    if (!baselineNonce || loading) return undefined;
+    if (!headerEditor || !bodyEditor || !footerEditor) return undefined;
+    const t = setTimeout(() => takeSnapshot(), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baselineNonce, loading, headerEditor, bodyEditor, footerEditor]);
 
   const pagePx = useMemo(() => pagePixelSize(pageSettings), [pageSettings]);
 
-  const insertPlaceholder = (token) => {
-    currentEditor?.chain().focus().insertContent(token).run();
+  const insertPlaceholder = (phOrToken) => {
+    const ph = typeof phOrToken === 'string'
+      ? placeholders.find((p) => p.token === phOrToken) || {
+        token: phOrToken,
+        label: String(phOrToken).replace(/[{}]/g, ''),
+      }
+      : phOrToken;
+    const key = String(ph.token || '')
+      .replace(/^\{\{|\}\}$/g, '')
+      .trim();
+    if (!key || !currentEditor) return;
+    currentEditor
+      .chain()
+      .focus()
+      .insertContent({
+        type: 'reportPlaceholder',
+        attrs: { key, label: ph.label || key },
+      })
+      .run();
   };
 
-  const addPlaceholder = () => {
-    const label = window.prompt('Placeholder label (e.g. Enquiry No)');
-    if (!label?.trim()) return;
-    const key = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'field';
+  const addPlaceholder = (rawLabel) => {
+    const label = String(rawLabel || '').trim();
+    if (!label) {
+      message.warning('Enter a placeholder name');
+      return false;
+    }
+    const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'field';
     const token = `{{${key}}}`;
     if (placeholders.some((p) => p.token === token)) {
       message.warning('Placeholder already exists');
-      return;
+      return false;
     }
-    setPlaceholders((p) => [...p, { token, label: label.trim() }]);
+    setPlaceholders((p) => [...p, { token, label, custom: true }]);
     message.success('Placeholder added — click it to insert');
+    return true;
+  };
+
+  const removePlaceholder = (token) => {
+    setPlaceholders((list) => list.filter((p) => !(p.custom && p.token === token)));
   };
 
   const uploadImage = (file) => {
@@ -645,7 +810,7 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
   const save = async () => {
     if (!name.trim()) {
       message.error('Enter a template name');
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -679,10 +844,34 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
         message.success('Template created');
       }
       onSaved?.(saved);
+      takeSnapshot();
+      return true;
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Save failed'));
+      return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBack = () => {
+    if (isDirty()) {
+      setLeaveOpen(true);
+      return;
+    }
+    onBack?.();
+  };
+
+  const handleDiscard = () => {
+    setLeaveOpen(false);
+    onBack?.();
+  };
+
+  const handleSaveAndLeave = async () => {
+    const ok = await save();
+    if (ok) {
+      setLeaveOpen(false);
+      onBack?.();
     }
   };
 
@@ -691,11 +880,12 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name}</title>
 <style>
   @page { size: ${pageSettings.pageSize} ${pageSettings.orientation}; margin: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; }
-  body { font-family: ${pageSettings.fontFamily || 'Inter'}, Arial, sans-serif; font-size: ${pageSettings.fontSize || '12px'}; color: #0f172a; }
+  body { font-family: ${pageSettings.fontFamily || 'Times New Roman'}, Arial, sans-serif; font-size: ${pageSettings.fontSize || '12px'}; color: #0f172a; }
   table { border-collapse: collapse; width: 100%; }
-  td, th { border: 1px solid #cbd5e1; padding: 4px 6px; vertical-align: top; }
-  th { background: #f1f5f9; }
+  td, th { border: 1px solid #000; padding: 4px 6px; vertical-align: top; background: #fff; }
+  th { background: #fff; font-weight: 600; }
   img { max-width: 100%; height: auto; }
+  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
   <div>${headerEditor?.getHTML() || ''}</div>
   <div style="margin:${pageSettings.headerSpacing}mm 0">${bodyEditor?.getHTML() || ''}</div>
@@ -889,7 +1079,7 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
-        <Button type="text" icon={<ArrowLeftOutlined />} onClick={onBack}>Back</Button>
+        <Button type="text" icon={<ArrowLeftOutlined />} onClick={handleBack}>Back</Button>
         <Input className="!max-w-xs" value={name} onChange={(e) => setName(e.target.value)} placeholder="Template name" />
         <Space className="ml-auto" wrap>
           <Tooltip title="Undo"><Button icon={<UndoOutlined />} onClick={() => currentEditor?.chain().focus().undo().run()} /></Tooltip>
@@ -918,7 +1108,9 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
           placeholders={placeholders}
           onInsertPlaceholder={insertPlaceholder}
           onAddPlaceholder={addPlaceholder}
+          onRemovePlaceholder={removePlaceholder}
           onUploadImage={uploadImage}
+          selectionTick={selectionTick}
         />
 
         <div className="min-h-0 flex-1 overflow-auto p-6">
@@ -928,22 +1120,84 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
               style={{
                 width: pagePx.width,
                 minHeight: pagePx.height,
+                height: pagePx.height,
                 transform: `scale(${zoom})`,
                 padding: `${pageSettings.margins.top}mm ${pageSettings.margins.right}mm ${pageSettings.margins.bottom}mm ${pageSettings.margins.left}mm`,
                 boxSizing: 'border-box',
-                fontFamily: pageSettings.fontFamily || 'Inter',
+                fontFamily: pageSettings.fontFamily || 'Times New Roman',
                 fontSize: pageSettings.fontSize || '12px',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
               <SectionEditor label="Header" editor={headerEditor} active={activeSection === 'header'} onFocus={() => setActiveSection('header')} />
-              <div style={{ marginTop: `${pageSettings.headerSpacing}mm`, marginBottom: `${pageSettings.footerSpacing}mm` }}>
+              <div
+                className="min-h-0 flex-1 overflow-auto"
+                style={{ marginTop: `${pageSettings.headerSpacing}mm`, marginBottom: `${pageSettings.footerSpacing}mm` }}
+              >
                 <SectionEditor label="Body" editor={bodyEditor} active={activeSection === 'body'} onFocus={() => setActiveSection('body')} />
               </div>
-              <SectionEditor label="Footer" editor={footerEditor} active={activeSection === 'footer'} onFocus={() => setActiveSection('footer')} />
+              <SectionEditor
+                label="Footer"
+                editor={footerEditor}
+                active={activeSection === 'footer'}
+                onFocus={() => setActiveSection('footer')}
+                pinned
+              />
             </div>
           </div>
         </div>
       </div>
+
+      {headerEditor ? <TableGripControls editor={headerEditor} /> : null}
+      {bodyEditor ? <TableGripControls editor={bodyEditor} /> : null}
+      {footerEditor ? <TableGripControls editor={footerEditor} /> : null}
+      {headerEditor ? <SelectionFormatToolbar editor={headerEditor} /> : null}
+      {bodyEditor ? <SelectionFormatToolbar editor={bodyEditor} /> : null}
+      {footerEditor ? <SelectionFormatToolbar editor={footerEditor} /> : null}
+
+      <Modal
+        open={leaveOpen}
+        footer={null}
+        closable={false}
+        centered
+        width={460}
+        onCancel={() => setLeaveOpen(false)}
+        destroyOnHidden
+      >
+        <div className="flex gap-3 pr-2">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xl text-orange-500">
+            <SaveOutlined />
+          </div>
+          <div>
+            <div className="text-base font-bold uppercase tracking-wide text-slate-900">
+              Unsaved Changes
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              You haven&apos;t saved this template. Do you want to save your changes before leaving?
+            </p>
+          </div>
+        </div>
+        <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={() => setLeaveOpen(false)}>Cancel</Button>
+          <Button
+            danger
+            className="!border-red-300 !bg-red-50 !text-red-600 hover:!border-red-400 hover:!bg-red-100"
+            onClick={handleDiscard}
+          >
+            No (Discard)
+          </Button>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            loading={saving}
+            className="!bg-blue-600 hover:!bg-blue-700"
+            onClick={handleSaveAndLeave}
+          >
+            Yes (Save)
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
