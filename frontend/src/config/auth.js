@@ -89,9 +89,27 @@ api.interceptors.response.use(
 );
 
 export function getApiErrorMessage(error, fallback = 'Something went wrong') {
+  const status = error?.response?.status;
   const data = error?.response?.data;
-  if (data?.error?.detail && data.error.detail !== 'Request validation failed') {
-    return data.error.detail;
+  const code = data?.error?.code;
+  const url = String(error?.config?.url || '');
+
+  if (status === 409 || code === 'conflict') {
+    if (url.includes('custom-fields') || /column/i.test(fallback)) {
+      return 'Column already exists';
+    }
+    return 'This record already exists';
+  }
+
+  const detail = data?.error?.detail;
+  if (detail && detail !== 'Request validation failed') {
+    if (/unique constraint|integrity rule/i.test(detail)) {
+      if (url.includes('custom-fields') || /column/i.test(fallback)) {
+        return 'Column already exists';
+      }
+      return 'This record already exists';
+    }
+    return detail;
   }
   const fieldErrors = data?.error?.errors;
   if (Array.isArray(fieldErrors) && fieldErrors.length) {

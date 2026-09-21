@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button, Form, Input, Modal, Popconfirm, Select, Switch, Table, Typography, message,
 } from 'antd';
@@ -8,6 +8,8 @@ import {
   hideActivityBuiltinColumn,
   updateActivityBuiltinColumn,
 } from '../utils/activityColumns.js';
+
+const EMPTY_LIST = [];
 
 const FIELD_TYPES = [
   { value: 'TEXT', label: 'Text' },
@@ -28,40 +30,60 @@ function toKey(label) {
     .slice(0, 100);
 }
 
+function rowKey(field, index) {
+  return String(field?.id ?? field?.field_key ?? `col-${index}`);
+}
+
 export default function ManageColumnsModal({
   open,
   onClose,
   entityType,
-  fields = [],
-  builtinFields = [],
+  fields,
+  builtinFields,
   onChanged,
 }) {
   const [addForm] = Form.useForm();
   const [savingId, setSavingId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [draftLabels, setDraftLabels] = useState({});
+  const wasOpen = useRef(false);
 
-  const allRows = [...builtinFields, ...fields];
+  const fieldList = Array.isArray(fields) ? fields : EMPTY_LIST;
+  const builtinList = Array.isArray(builtinFields) ? builtinFields : EMPTY_LIST;
 
+  const allRows = useMemo(
+    () => [...builtinList, ...fieldList].filter((f) => f && !f.is_hidden),
+    [builtinList, fieldList],
+  );
+
+  // Sync rename drafts when column list changes (not on every keystroke in Add form)
   useEffect(() => {
     if (!open) return;
     const next = {};
-    allRows.forEach((f) => {
-      next[f.id] = f.field_label;
+    allRows.forEach((f, i) => {
+      next[rowKey(f, i)] = f.field_label ?? '';
     });
     setDraftLabels(next);
-    addForm.resetFields();
-    addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
-  }, [open, fields, builtinFields, addForm]);
+  }, [open, allRows]);
 
-  const rename = async (field) => {
-    const label = String(draftLabels[field.id] || '').trim();
+  // Reset Add form only when modal opens (not when typing / selecting type)
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      addForm.resetFields();
+      addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
+    }
+    wasOpen.current = open;
+  }, [open, addForm]);
+
+  const rename = async (field, index) => {
+    const key = rowKey(field, index);
+    const label = String(draftLabels[key] || '').trim();
     if (!label) {
       message.error('Column name cannot be empty');
       return;
     }
     if (label === field.field_label) return;
-    setSavingId(field.id);
+    setSavingId(key);
     try {
       if (field.is_builtin) {
         updateActivityBuiltinColumn(field.field_key, { field_label: label });
@@ -79,8 +101,9 @@ export default function ManageColumnsModal({
     }
   };
 
-  const toggleRequired = async (field, checked) => {
-    setSavingId(field.id);
+  const toggleRequired = async (field, index, checked) => {
+    const key = rowKey(field, index);
+    setSavingId(key);
     try {
       if (field.is_builtin) {
         updateActivityBuiltinColumn(field.field_key, { is_required: checked });
@@ -102,7 +125,7 @@ export default function ManageColumnsModal({
     try {
       if (field.is_builtin) {
         hideActivityBuiltinColumn(field.field_key);
-        message.success('Column removed from table (can re-add via Add column with same name)');
+        message.success('Column removed from table');
         onChanged?.();
         return;
       }
@@ -123,11 +146,6 @@ export default function ManageColumnsModal({
         return;
       }
 
-      // Restore a hidden builtin if the name matches
-      const hiddenBuiltin = builtinFields.find(
-        (b) => b.is_hidden && (b.field_key === field_key || b.field_label.toLowerCase() === values.field_label.trim().toLowerCase()),
-      );
-      // Check against ACTIVITY_BUILTIN via field_key match even if not in builtinFields list
       const builtinKeys = ['name', 'description', 'unit', 'unit_price'];
       if (builtinKeys.includes(field_key) && entityType === 'ACTIVITY') {
         updateActivityBuiltinColumn(field_key, {
@@ -142,6 +160,12 @@ export default function ManageColumnsModal({
         return;
       }
 
+      const hiddenBuiltin = builtinList.find(
+        (b) => b?.is_hidden && (
+          b.field_key === field_key
+          || String(b.field_label || '').toLowerCase() === values.field_label.trim().toLowerCase()
+        ),
+      );
       if (hiddenBuiltin) {
         updateActivityBuiltinColumn(hiddenBuiltin.field_key, {
           is_hidden: false,
@@ -162,9 +186,9 @@ export default function ManageColumnsModal({
         is_required: Boolean(values.is_required),
         is_visible: true,
         is_editable: true,
-        display_order: fields.length,
+        display_order: fieldList.length,
       });
-      message.success('Column added — rename it anytime in the list above');
+      message.success('Column added');
       addForm.resetFields();
       addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
       onChanged?.();
@@ -183,7 +207,7 @@ export default function ManageColumnsModal({
       onCancel={onClose}
       footer={<Button onClick={onClose}>Close</Button>}
       width={720}
-      destroyOnHidden
+      destroyOnHidden={false}
     >
       <Typography.Text type="secondary" className="mb-3 block">
         Rename existing columns below. Mark mandatory or delete. Add a new column and it appears in this list to rename.
@@ -191,42 +215,49 @@ export default function ManageColumnsModal({
 
       <Table
         size="small"
-        rowKey="id"
+        rowKey={(record, index) => rowKey(record, index)}
         pagination={false}
         locale={{ emptyText: 'No columns yet — add one below' }}
-        dataSource={allRows.filter((f) => !f.is_hidden)}
+        dataSource={allRows}
         columns={[
           {
             title: 'Column name',
             key: 'label',
-            render: (_, field) => (
-              <Input
-                value={draftLabels[field.id] ?? field.field_label}
-                onChange={(e) => setDraftLabels((s) => ({ ...s, [field.id]: e.target.value }))}
-                onBlur={() => rename(field)}
-                onPressEnter={() => rename(field)}
-                disabled={savingId === field.id}
-                placeholder="Rename column"
-              />
-            ),
+            render: (_, field, index) => {
+              const key = rowKey(field, index);
+              return (
+                <Input
+                  value={draftLabels[key] ?? field.field_label ?? ''}
+                  onChange={(e) => setDraftLabels((s) => ({ ...s, [key]: e.target.value }))}
+                  onBlur={() => rename(field, index)}
+                  onPressEnter={() => rename(field, index)}
+                  disabled={savingId === key}
+                  placeholder="Rename column"
+                />
+              );
+            },
           },
           {
             title: 'Type',
             dataIndex: 'field_type',
             width: 110,
+            render: (v) => v || 'TEXT',
           },
           {
             title: 'Mandatory',
             key: 'required',
             width: 110,
             align: 'center',
-            render: (_, field) => (
-              <Switch
-                checked={Boolean(field.is_required)}
-                loading={savingId === field.id}
-                onChange={(checked) => toggleRequired(field, checked)}
-              />
-            ),
+            render: (_, field, index) => {
+              const key = rowKey(field, index);
+              return (
+                <Switch
+                  checked={Boolean(field.is_required)}
+                  loading={savingId === key}
+                  onChange={(checked) => toggleRequired(field, index, checked)}
+                />
+              );
+            },
           },
           {
             title: '',

@@ -52,8 +52,8 @@ export default function Configuration() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const load = async () => {
-    setLoading(true);
+  const load = async ({ quiet = false } = {}) => {
+    if (!quiet) setLoading(true);
     try {
       const [org, custom] = await Promise.all([
         api.get('/organizations/me').then((r) => r.data),
@@ -74,7 +74,7 @@ export default function Configuration() {
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to load company settings'));
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   };
 
@@ -100,7 +100,7 @@ export default function Configuration() {
       });
       await refreshMe();
       message.success('Company details saved');
-      load();
+      load({ quiet: true });
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Save failed'));
     } finally {
@@ -108,91 +108,91 @@ export default function Configuration() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="grid h-full place-items-center">
-        <Spin size="large" />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <Typography.Title level={3} className="!mb-1 !font-sans !text-teal-800">
-            Configuration
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            Company details used on reports. Add custom columns as needed.
-          </Typography.Text>
+      {loading ? (
+        <div className="grid h-full place-items-center">
+          <Spin size="large" />
         </div>
-        <Space>
-          <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
-            Columns
-          </Button>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
-            Save
-          </Button>
-        </Space>
-      </div>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <Typography.Title level={3} className="!mb-1 !font-sans !text-teal-800">
+                Configuration
+              </Typography.Title>
+              <Typography.Text type="secondary">
+                Company details used on reports. Add custom columns as needed.
+              </Typography.Text>
+            </div>
+            <Space>
+              <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
+                Columns
+              </Button>
+              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+                Save
+              </Button>
+            </Space>
+          </div>
 
-      <Card className="border-slate-200 shadow-sm">
-        <Form form={form} layout="vertical">
-          <Row gutter={[24, 0]}>
-            <Col xs={24} md={12}>
-              <Form.Item name="name" label="Company name" rules={[{ required: true }]}>
-                <Input size="large" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="code" label="Organization code">
-                <Input size="large" disabled />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="email" label="Email"><Input size="large" /></Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="phone" label="Phone"><Input size="large" /></Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="website" label="Website"><Input size="large" /></Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="tax_number" label="Tax / GST number"><Input size="large" /></Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="address" label="Address">
-                <Input.TextArea rows={3} />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="notes" label="Notes">
-                <Input.TextArea rows={3} />
-              </Form.Item>
-            </Col>
-            {customFields.map((f) => (
-              <Col xs={24} md={12} key={f.field_key}>
-                <Form.Item
-                  name={f.field_key}
-                  label={f.field_label}
-                  rules={f.is_required ? [{ required: true, message: `${f.field_label} is required` }] : undefined}
-                >
-                  <Input size="large" />
-                </Form.Item>
-              </Col>
-            ))}
-          </Row>
-        </Form>
-      </Card>
+          <Card className="border-slate-200 shadow-sm">
+            <Form form={form} layout="vertical">
+              <Row gutter={[24, 0]}>
+                <Col xs={24} md={12}>
+                  <Form.Item name="name" label="Company name" rules={[{ required: true }]}>
+                    <Input size="large" />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="code" label="Organization code">
+                    <Input size="large" disabled />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="email" label="Email"><Input size="large" /></Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="phone" label="Phone"><Input size="large" /></Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="website" label="Website"><Input size="large" /></Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="tax_number" label="Tax / GST number"><Input size="large" /></Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="address" label="Address">
+                    <Input.TextArea rows={3} />
+                  </Form.Item>
+                </Col>
+                <Col xs={24} md={12}>
+                  <Form.Item name="notes" label="Notes">
+                    <Input.TextArea rows={3} />
+                  </Form.Item>
+                </Col>
+                {customFields.map((f) => (
+                  <Col xs={24} md={12} key={f.field_key}>
+                    <Form.Item
+                      name={f.field_key}
+                      label={f.field_label}
+                      rules={f.is_required ? [{ required: true, message: `${f.field_label} is required` }] : undefined}
+                    >
+                      <Input size="large" />
+                    </Form.Item>
+                  </Col>
+                ))}
+              </Row>
+            </Form>
+          </Card>
+        </>
+      )}
 
       <ManageColumnsModal
         open={columnOpen}
         onClose={() => setColumnOpen(false)}
         entityType="ORGANIZATION"
         fields={customFields}
-        onChanged={load}
+        onChanged={() => load({ quiet: true })}
       />
     </div>
   );

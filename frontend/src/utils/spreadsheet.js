@@ -154,7 +154,11 @@ function reportColumns(rows) {
 
 function reportBody(rows, columns) {
   return (rows || []).map((row, i) => columns.map((col) => {
-    if (col === 'SL NO') return String(i + 1);
+    if (col === 'SL NO') {
+      const existing = row['Sl No'] ?? row['SL NO'] ?? row['Sl No.'];
+      if (existing != null && existing !== '') return String(existing);
+      return String(i + 1);
+    }
     const val = row[col];
     return val == null || val === '' ? '—' : String(val);
   }));

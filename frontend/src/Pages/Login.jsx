@@ -4,6 +4,11 @@ import { ArrowRightOutlined } from '@ant-design/icons';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { homePathForUser, useAuth } from '../config/AuthContext.jsx';
+import {
+  digitsOnlyPhone,
+  phoneFieldRules,
+  phoneInputProps,
+} from '../utils/phoneValidation.js';
 
 export default function Login() {
   const { login, registerOrganization, getApiErrorMessage } = useAuth();
@@ -225,8 +230,13 @@ export default function Login() {
                 >
                   <Input size="large" placeholder="admin@company.com" autoComplete="email" className="!rounded-lg" />
                 </Form.Item>
-                <Form.Item name="phone" label="Phone" rules={[{ required: true, message: 'Required' }]}>
-                  <Input size="large" placeholder="Mobile number" className="!rounded-lg" />
+                <Form.Item
+                  name="phone"
+                  label="Phone"
+                  rules={phoneFieldRules({ required: true, label: 'phone' })}
+                  getValueFromEvent={(e) => digitsOnlyPhone(e.target.value)}
+                >
+                  <Input size="large" className="!rounded-lg" {...phoneInputProps()} />
                 </Form.Item>
                 <Form.Item
                   name="password"

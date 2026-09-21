@@ -9,6 +9,13 @@ import { api, getApiErrorMessage } from '../../config/auth.js';
 import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
 import { recordMatchesSearch, slNoColumn } from '../../utils/tableHelpers';
+import {
+  digitsOnlyPhone,
+  isPhoneLikeField,
+  isValidPhone,
+  phoneFieldRules,
+  phoneInputProps,
+} from '../../utils/phoneValidation.js';
 
 export default function Team() {
   const [rows, setRows] = useState([]);
@@ -91,11 +98,23 @@ export default function Team() {
       message.error('Name is required');
       return;
     }
+    if (draft.phone && !isValidPhone(draft.phone)) {
+      message.error('Enter a valid 10-digit phone number');
+      return;
+    }
     const custom_data = {};
     for (const f of customFields) {
       const val = draft[f.field_key];
       if (f.is_required && (val == null || val === '')) {
         message.error(`${f.field_label} is required`);
+        return;
+      }
+      if (
+        (isPhoneLikeField(f.field_key) || isPhoneLikeField(f.field_label))
+        && val
+        && !isValidPhone(val)
+      ) {
+        message.error(`${f.field_label} must be a valid 10-digit number`);
         return;
       }
       if (val != null && val !== '') custom_data[f.field_key] = val;
@@ -192,29 +211,42 @@ export default function Team() {
       dataIndex: 'phone',
       render: (v, record) => (
         editingId === record.id
-          ? <Input value={draft.phone} onChange={(e) => setField('phone', e.target.value)} />
+          ? (
+            <Input
+              {...phoneInputProps()}
+              value={draft.phone}
+              onChange={(e) => setField('phone', digitsOnlyPhone(e.target.value))}
+            />
+          )
           : (v || '—')
       ),
     },
-    ...customFields.map((f) => ({
-      title: (
-        <span>
-          {f.field_label}
-          {f.is_required ? <span className="text-red-500"> *</span> : null}
-        </span>
-      ),
-      key: f.field_key,
-      render: (_, record) => (
-        editingId === record.id
-          ? (
-            <Input
-              value={draft[f.field_key] ?? ''}
-              onChange={(e) => setField(f.field_key, e.target.value)}
-            />
-          )
-          : (record.custom_data?.[f.field_key] ?? '—')
-      ),
-    })),
+    ...customFields.map((f) => {
+      const phoneLike = isPhoneLikeField(f.field_key) || isPhoneLikeField(f.field_label);
+      return {
+        title: (
+          <span>
+            {f.field_label}
+            {f.is_required ? <span className="text-red-500"> *</span> : null}
+          </span>
+        ),
+        key: f.field_key,
+        render: (_, record) => (
+          editingId === record.id
+            ? (
+              <Input
+                {...(phoneLike ? phoneInputProps() : {})}
+                value={draft[f.field_key] ?? ''}
+                onChange={(e) => setField(
+                  f.field_key,
+                  phoneLike ? digitsOnlyPhone(e.target.value) : e.target.value,
+                )}
+              />
+            )
+            : (record.custom_data?.[f.field_key] ?? '—')
+        ),
+      };
+    }),
     {
       title: 'Actions',
       key: 'actions',
@@ -317,7 +349,14 @@ export default function Team() {
           <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="phone" label="Phone"><Input /></Form.Item>
+          <Form.Item
+            name="phone"
+            label="Phone"
+            rules={phoneFieldRules({ label: 'phone' })}
+            getValueFromEvent={(e) => digitsOnlyPhone(e.target.value)}
+          >
+            <Input {...phoneInputProps()} />
+          </Form.Item>
           <Form.Item name="role_name" label="Role" rules={[{ required: true }]}>
             <Select options={[
               { value: 'USER', label: 'User' },
@@ -328,16 +367,22 @@ export default function Team() {
           <Form.Item name="password" label="Password" rules={[{ required: true, min: 8 }]}>
             <Input.Password />
           </Form.Item>
-          {customFields.map((f) => (
-            <Form.Item
-              key={f.field_key}
-              name={f.field_key}
-              label={f.field_label}
-              rules={f.is_required ? [{ required: true, message: `${f.field_label} is required` }] : undefined}
-            >
-              <Input />
-            </Form.Item>
-          ))}
+          {customFields.map((f) => {
+            const phoneLike = isPhoneLikeField(f.field_key) || isPhoneLikeField(f.field_label);
+            return (
+              <Form.Item
+                key={f.field_key}
+                name={f.field_key}
+                label={f.field_label}
+                rules={phoneLike
+                  ? phoneFieldRules({ required: f.is_required, label: f.field_label.toLowerCase() })
+                  : (f.is_required ? [{ required: true, message: `${f.field_label} is required` }] : undefined)}
+                getValueFromEvent={phoneLike ? (e) => digitsOnlyPhone(e.target.value) : undefined}
+              >
+                <Input {...(phoneLike ? phoneInputProps() : {})} />
+              </Form.Item>
+            );
+          })}
         </Form>
       </Modal>
 

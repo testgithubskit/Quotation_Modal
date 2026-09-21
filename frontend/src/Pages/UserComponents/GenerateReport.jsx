@@ -14,6 +14,11 @@ import {
   addSchemaField,
   removeSchemaField,
 } from '../../utils/reportFormSchema.js';
+import {
+  digitsOnlyPhone,
+  phoneFieldRules,
+  phoneInputProps,
+} from '../../utils/phoneValidation.js';
 
 const UNIT_OPTIONS = ['Nos', 'Set', 'Each', 'Parameter', 'Hour', 'Day'];
 const UNIT_SELECT_OPTIONS = [
@@ -110,7 +115,8 @@ export default function GenerateReport() {
   const activityOptions = useMemo(
     () => activities.map((a) => ({
       value: a.id,
-      label: `${a.code} — ${a.name}`,
+      label: a.name || a.code || 'Activity',
+      code: a.code || '',
     })),
     [activities],
   );
@@ -165,7 +171,7 @@ export default function GenerateReport() {
     if (!a) return;
     setItemField(key, {
       activityId,
-      sampleActivity: `${a.code} — ${a.name}`,
+      sampleActivity: a.name || '',
       description: a.description || a.name || '',
       specification: a.name || '',
       unit: a.unit || 'Nos',
@@ -179,7 +185,7 @@ export default function GenerateReport() {
     if (!a) return;
     setSubField(itemKey, subKey, {
       activityId,
-      sampleActivity: `${a.code} — ${a.name}`,
+      sampleActivity: a.name || '',
       description: a.description || a.name || '',
       specification: a.name || '',
       unit: a.unit || 'Nos',
@@ -433,7 +439,13 @@ export default function GenerateReport() {
             className="w-full"
             placeholder="Search calibration items"
             options={activityOptions}
-            filterOption={(input, option) => option.label.toLowerCase().includes(input.toLowerCase())}
+            filterOption={(input, option) => {
+              const q = String(input || '').toLowerCase();
+              return (
+                String(option?.label || '').toLowerCase().includes(q)
+                || String(option?.code || '').toLowerCase().includes(q)
+              );
+            }}
             value={row.activityId}
             onChange={(id) => (isSub
               ? selectActivityForSub(parentKey, row.key, id)
@@ -644,8 +656,13 @@ export default function GenerateReport() {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Form.Item name="mobileNumber" label="Mobile Number">
-                <Input placeholder="Enter mobile number" />
+              <Form.Item
+                name="mobileNumber"
+                label="Mobile Number"
+                rules={phoneFieldRules({ label: 'mobile number' })}
+                getValueFromEvent={(e) => digitsOnlyPhone(e.target.value)}
+              >
+                <Input {...phoneInputProps()} />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={6}>

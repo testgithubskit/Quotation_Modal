@@ -1,32 +1,53 @@
 import { Form, Input, InputNumber, DatePicker } from 'antd';
 import dayjs from 'dayjs';
+import {
+  digitsOnlyPhone,
+  isPhoneLikeField,
+  phoneFieldRules,
+  phoneInputProps,
+} from '../utils/phoneValidation.js';
 
 export function DynamicFormField({ field, namePrefix = [] }) {
   const name = [...namePrefix, field.key];
+  const phoneLike = isPhoneLikeField(field.key) || isPhoneLikeField(field.label);
   const rules = [];
-  if (field.required) rules.push({ required: true, message: `Enter ${field.label.toLowerCase()}` });
-  if (field.type === 'email') rules.push({ type: 'email', message: 'Enter a valid email' });
+
+  if (phoneLike) {
+    rules.push(...phoneFieldRules({ required: field.required, label: field.label.toLowerCase() }));
+  } else {
+    if (field.required) rules.push({ required: true, message: `Enter ${field.label.toLowerCase()}` });
+    if (field.type === 'email') rules.push({ type: 'email', message: 'Enter a valid email' });
+  }
 
   let input;
-  switch (field.type) {
-    case 'number':
-      input = <InputNumber min={0} className="w-full" />;
-      break;
-    case 'textarea':
-      input = <Input.TextArea rows={2} placeholder={`Enter ${field.label.toLowerCase()}`} />;
-      break;
-    case 'date':
-      input = <DatePicker className="w-full" format="DD/M/YY" />;
-      break;
-    case 'email':
-      input = <Input type="email" placeholder={`Enter ${field.label.toLowerCase()}`} />;
-      break;
-    default:
-      input = <Input placeholder={`Enter ${field.label.toLowerCase()}`} />;
+  if (phoneLike) {
+    input = <Input {...phoneInputProps()} />;
+  } else {
+    switch (field.type) {
+      case 'number':
+        input = <InputNumber min={0} className="w-full" />;
+        break;
+      case 'textarea':
+        input = <Input.TextArea rows={2} placeholder={`Enter ${field.label.toLowerCase()}`} />;
+        break;
+      case 'date':
+        input = <DatePicker className="w-full" format="DD/M/YY" />;
+        break;
+      case 'email':
+        input = <Input type="email" placeholder={`Enter ${field.label.toLowerCase()}`} />;
+        break;
+      default:
+        input = <Input placeholder={`Enter ${field.label.toLowerCase()}`} />;
+    }
   }
 
   return (
-    <Form.Item name={name} label={field.label} rules={rules}>
+    <Form.Item
+      name={name}
+      label={field.label}
+      rules={rules}
+      getValueFromEvent={phoneLike ? (e) => digitsOnlyPhone(e.target.value) : undefined}
+    >
       {input}
     </Form.Item>
   );
