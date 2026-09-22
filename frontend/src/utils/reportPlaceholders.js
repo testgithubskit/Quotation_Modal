@@ -3,7 +3,6 @@ export const REPORT_PLACEHOLDERS = [
   { token: '{{date}}', label: 'Report Date' },
   { token: '{{customer_name}}', label: 'Customer Name' },
   { token: '{{company_name}}', label: 'Company' },
-  { token: '{{contact_person}}', label: 'Contact Person' },
   { token: '{{mobile}}', label: 'Mobile' },
   { token: '{{email}}', label: 'Email' },
   { token: '{{subject}}', label: 'Subject' },
@@ -16,6 +15,82 @@ export const REPORT_PLACEHOLDERS = [
   { token: '{{page_number}}', label: 'Page #' },
   { token: '{{total_pages}}', label: 'Total Pages' },
 ];
+
+/** Strip {{ }} wrappers → map key used by fillPlaceholders */
+export function placeholderKey(tokenOrKey) {
+  return String(tokenOrKey || '')
+    .replace(/^\{\{\s*/, '')
+    .replace(/\s*\}\}$/, '')
+    .trim();
+}
+
+export const BUILTIN_PLACEHOLDER_KEYS = new Set([
+  ...REPORT_PLACEHOLDERS.map((p) => placeholderKey(p.token)),
+  'contact_person', // legacy alias of customer_name (removed from palette)
+]);
+
+function humanizeKey(key) {
+  return String(key || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim() || 'Field';
+}
+
+/** Collect placeholder keys referenced in template HTML (chips + {{tokens}}). */
+export function extractPlaceholderKeysFromHtml(html) {
+  const keys = new Set();
+  const text = String(html || '');
+  text.replace(/\bdata-placeholder=["']([^"']+)["']/gi, (_, key) => {
+    const k = placeholderKey(key);
+    if (k) keys.add(k);
+    return '';
+  });
+  text.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_, key) => {
+    const k = placeholderKey(key);
+    if (k) keys.add(k);
+    return '';
+  });
+  return keys;
+}
+
+/**
+ * Extra form fields driven by the starred template:
+ * customPlaceholders + any non-built-in tokens used in header/body/footer HTML.
+ */
+export function resolveTemplateExtraFields(template) {
+  const td = template?.template_data || {};
+  const byKey = new Map();
+
+  (td.customPlaceholders || []).forEach((p) => {
+    const key = placeholderKey(p?.token || p?.key);
+    if (!key || BUILTIN_PLACEHOLDER_KEYS.has(key)) return;
+    byKey.set(key, {
+      key,
+      label: p.label || humanizeKey(key),
+      type: p.type || 'text',
+      token: p.token || `{{${key}}}`,
+      required: Boolean(p.required),
+    });
+  });
+
+  const htmlKeys = new Set([
+    ...extractPlaceholderKeysFromHtml(td.headerHtml),
+    ...extractPlaceholderKeysFromHtml(td.bodyHtml),
+    ...extractPlaceholderKeysFromHtml(td.footerHtml),
+  ]);
+  htmlKeys.forEach((key) => {
+    if (!key || BUILTIN_PLACEHOLDER_KEYS.has(key) || byKey.has(key)) return;
+    byKey.set(key, {
+      key,
+      label: humanizeKey(key),
+      type: 'text',
+      token: `{{${key}}}`,
+      required: false,
+    });
+  });
+
+  return Array.from(byKey.values());
+}
 
 export const PAGE_SIZE_OPTIONS = [
   { value: 'A3', label: 'A3 (297×420mm)', w: 297, h: 420 },

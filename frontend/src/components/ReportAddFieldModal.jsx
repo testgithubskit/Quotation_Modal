@@ -47,6 +47,8 @@ export default function ReportAddFieldModal({
       }}
       footer={null}
       destroyOnHidden
+      maskClosable={false}
+      keyboard={false}
     >
       <Typography.Paragraph type="secondary" className="!mt-2">
         Built-in fields cannot be removed. Add custom fields to extend the form.

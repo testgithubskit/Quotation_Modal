@@ -1,12 +1,19 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 
 from app.api.deps import DbSession, Pagination, require_permission
+from app.core.exceptions import AppError
 from app.models import User
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerUpdate
+from app.schemas.spreadsheet_import import (
+    SpreadsheetConfirmRequest,
+    SpreadsheetImportResponse,
+    SpreadsheetPreviewResponse,
+)
 from app.services.catalog import customer_service
+from app.services.catalog_import import catalog_import_service
 
 router = APIRouter()
 
@@ -24,6 +31,38 @@ def list_customers(
         pagination["page"],
         pagination["page_size"],
     )
+
+
+@router.post("/import/preview", response_model=SpreadsheetPreviewResponse)
+async def preview_customers_import(
+    db: DbSession,
+    current_user: User = Depends(require_permission("customers:create")),
+    file: UploadFile = File(...),
+) -> SpreadsheetPreviewResponse:
+    filename = file.filename or "upload.xlsx"
+    data = await file.read()
+    if not data:
+        raise AppError("Empty file", status_code=400, code="empty_file")
+    preview = catalog_import_service.preview_customers(db, current_user, data, filename)
+    if not preview["rows"]:
+        raise AppError(
+            "No valid customer rows found (need Customer Name). Only columns already defined in the app are extracted.",
+            status_code=400,
+            code="empty_preview",
+        )
+    return SpreadsheetPreviewResponse(**preview)
+
+
+@router.post("/import/confirm", response_model=SpreadsheetImportResponse)
+def confirm_customers_import(
+    payload: SpreadsheetConfirmRequest,
+    db: DbSession,
+    current_user: User = Depends(require_permission("customers:create")),
+) -> SpreadsheetImportResponse:
+    if not payload.rows:
+        raise AppError("No rows to import", status_code=400, code="empty_import")
+    result = catalog_import_service.confirm_customers(db, current_user, payload.rows)
+    return SpreadsheetImportResponse.from_result(result, "Customers")
 
 
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)

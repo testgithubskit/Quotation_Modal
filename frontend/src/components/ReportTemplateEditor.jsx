@@ -28,8 +28,7 @@ import {
   FilePdfOutlined, FileExcelOutlined, CloseOutlined,
 } from '@ant-design/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { CellSelection, selectionCell } from '@tiptap/pm/tables';
 import { api, getApiErrorMessage } from '../config/auth.js';
 import {
   DEFAULT_PAGE_SETTINGS,
@@ -40,6 +39,7 @@ import {
   pagePixelSize,
 } from '../utils/reportPlaceholders.js';
 import { datedFilename, downloadRowsExcel } from '../utils/spreadsheet.js';
+import { preserveBlankParagraphs } from '../utils/renderQuotationReport.js';
 import { ResizableImage } from './tiptap/ResizableImage.jsx';
 import TableGripControls from './tiptap/TableGripControls.jsx';
 import SelectionFormatToolbar from './tiptap/SelectionFormatToolbar.jsx';
@@ -72,6 +72,24 @@ const FontSize = Extension.create({
   },
 });
 
+const BORDER_SIDES = ['borderTop', 'borderRight', 'borderBottom', 'borderLeft'];
+const NO_BORDER = 'none';
+
+function cssBorderName(side) {
+  return side.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+}
+
+function parseBorderSide(el, side) {
+  const named = cssBorderName(side);
+  const raw = el.style?.getPropertyValue?.(named) || el.style?.[side] || null;
+  if (!raw) return null;
+  return raw;
+}
+
+function styleAttr(css) {
+  return css ? { style: css } : {};
+}
+
 const CustomTableCell = TableCell.extend({
   addAttributes() {
     return {
@@ -79,12 +97,32 @@ const CustomTableCell = TableCell.extend({
       backgroundColor: {
         default: null,
         parseHTML: (el) => el.style.backgroundColor || null,
-        renderHTML: (attrs) => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+        renderHTML: (attrs) => styleAttr(attrs.backgroundColor ? `background-color: ${attrs.backgroundColor}` : ''),
       },
       verticalAlign: {
         default: null,
         parseHTML: (el) => el.style.verticalAlign || null,
-        renderHTML: (attrs) => (attrs.verticalAlign ? { style: `vertical-align: ${attrs.verticalAlign}` } : {}),
+        renderHTML: (attrs) => styleAttr(attrs.verticalAlign ? `vertical-align: ${attrs.verticalAlign}` : ''),
+      },
+      borderTop: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderTop'),
+        renderHTML: (attrs) => styleAttr(attrs.borderTop != null ? `border-top: ${attrs.borderTop}` : ''),
+      },
+      borderRight: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderRight'),
+        renderHTML: (attrs) => styleAttr(attrs.borderRight != null ? `border-right: ${attrs.borderRight}` : ''),
+      },
+      borderBottom: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderBottom'),
+        renderHTML: (attrs) => styleAttr(attrs.borderBottom != null ? `border-bottom: ${attrs.borderBottom}` : ''),
+      },
+      borderLeft: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderLeft'),
+        renderHTML: (attrs) => styleAttr(attrs.borderLeft != null ? `border-left: ${attrs.borderLeft}` : ''),
       },
     };
   },
@@ -97,12 +135,32 @@ const CustomTableHeader = TableHeader.extend({
       backgroundColor: {
         default: null,
         parseHTML: (el) => el.style.backgroundColor || null,
-        renderHTML: (attrs) => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+        renderHTML: (attrs) => styleAttr(attrs.backgroundColor ? `background-color: ${attrs.backgroundColor}` : ''),
       },
       verticalAlign: {
         default: null,
         parseHTML: (el) => el.style.verticalAlign || null,
-        renderHTML: (attrs) => (attrs.verticalAlign ? { style: `vertical-align: ${attrs.verticalAlign}` } : {}),
+        renderHTML: (attrs) => styleAttr(attrs.verticalAlign ? `vertical-align: ${attrs.verticalAlign}` : ''),
+      },
+      borderTop: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderTop'),
+        renderHTML: (attrs) => styleAttr(attrs.borderTop != null ? `border-top: ${attrs.borderTop}` : ''),
+      },
+      borderRight: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderRight'),
+        renderHTML: (attrs) => styleAttr(attrs.borderRight != null ? `border-right: ${attrs.borderRight}` : ''),
+      },
+      borderBottom: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderBottom'),
+        renderHTML: (attrs) => styleAttr(attrs.borderBottom != null ? `border-bottom: ${attrs.borderBottom}` : ''),
+      },
+      borderLeft: {
+        default: null,
+        parseHTML: (el) => parseBorderSide(el, 'borderLeft'),
+        renderHTML: (attrs) => styleAttr(attrs.borderLeft != null ? `border-left: ${attrs.borderLeft}` : ''),
       },
     };
   },
@@ -125,6 +183,28 @@ const EDITOR_EXTENSIONS = (placeholder) => [
   ReportPlaceholder,
   Placeholder.configure({ placeholder }),
 ];
+
+function NoBorderIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden className="block">
+      <rect
+        x="1.5"
+        y="1.5"
+        width="13"
+        height="13"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeDasharray="2.2 1.6"
+      />
+      <path
+        d="M8 1.5v13M1.5 8h13"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeDasharray="2.2 1.6"
+      />
+    </svg>
+  );
+}
 
 function ToolBtn({ title, active, danger, onClick, icon, disabled }) {
   return (
@@ -154,7 +234,7 @@ function SectionEditor({ label, editor, active, onFocus, className = '', pinned 
       className={[
         'relative border-b border-dashed border-teal-200/70',
         active ? 'ring-1 ring-teal-400/40' : '',
-        pinned ? 'mt-auto border-b-0 border-t border-dashed border-teal-200/70' : '',
+        pinned ? 'mt-auto shrink-0 border-b-0 border-t border-dashed border-teal-200/70' : 'shrink-0',
         className,
       ].filter(Boolean).join(' ')}
       onMouseDown={onFocus}
@@ -203,8 +283,6 @@ function DesignerSidebar({
   setPageSettings,
   isDefault,
   setIsDefault,
-  description,
-  setDescription,
   placeholders,
   onInsertPlaceholder,
   onAddPlaceholder,
@@ -215,21 +293,94 @@ function DesignerSidebar({
   const fileRef = useRef(null);
   const [addingPh, setAddingPh] = useState(false);
   const [phDraft, setPhDraft] = useState('');
+  const [borderColor, setBorderColor] = useState('#000000');
   const inTable = Boolean(editor?.isActive('table'));
   // Re-read mark attrs whenever the editor selection/content updates
   void selectionTick;
   const textStyle = editor?.getAttributes('textStyle') || {};
   const highlightColor = editor?.getAttributes('highlight')?.color || '#fef08a';
+  const cellAttrs = {
+    ...(editor?.getAttributes('tableHeader') || {}),
+    ...(editor?.getAttributes('tableCell') || {}),
+  };
+
+  const patchSelectedCells = (patch) => {
+    if (!editor) return;
+    const { state, view } = editor;
+    const { selection } = state;
+    const tr = state.tr;
+    let changed = false;
+
+    if (selection instanceof CellSelection) {
+      selection.forEachCell((node, pos) => {
+        tr.setNodeMarkup(pos, null, { ...node.attrs, ...patch });
+        changed = true;
+      });
+    } else {
+      try {
+        const $cell = selectionCell(state);
+        if ($cell?.nodeAfter) {
+          tr.setNodeMarkup($cell.pos, null, { ...$cell.nodeAfter.attrs, ...patch });
+          changed = true;
+        }
+      } catch {
+        editor
+          .chain()
+          .focus()
+          .updateAttributes('tableCell', patch)
+          .updateAttributes('tableHeader', patch)
+          .run();
+        return;
+      }
+    }
+
+    if (changed) {
+      view.dispatch(tr);
+      editor.commands.focus();
+    }
+  };
 
   const setCellAttr = (key, value) => {
-    if (!editor) return;
-    editor
-      .chain()
-      .focus()
-      .updateAttributes('tableCell', { [key]: value })
-      .updateAttributes('tableHeader', { [key]: value })
-      .run();
+    patchSelectedCells({ [key]: value });
   };
+
+  const solidBorder = () => `1px solid ${borderColor || '#000000'}`;
+
+  const applyAllBorders = () => {
+    const value = solidBorder();
+    patchSelectedCells({
+      borderTop: value,
+      borderRight: value,
+      borderBottom: value,
+      borderLeft: value,
+    });
+  };
+
+  const applyNoBorders = () => {
+    patchSelectedCells({
+      borderTop: NO_BORDER,
+      borderRight: NO_BORDER,
+      borderBottom: NO_BORDER,
+      borderLeft: NO_BORDER,
+    });
+  };
+
+  const isBorderOn = (value) => (
+    value == null || value === '' || (value !== NO_BORDER && value !== '0' && value !== '0px')
+  );
+
+  const noBordersActive = BORDER_SIDES.every((side) => cellAttrs[side] === NO_BORDER);
+  const allBordersActive = !noBordersActive && BORDER_SIDES.every((side) => isBorderOn(cellAttrs[side]));
+
+  const toggleSideBorder = (side) => {
+    // null = CSS default (visible). Treat as ON for toggle-off.
+    const currentlyOn = cellAttrs[side] !== NO_BORDER;
+    patchSelectedCells({ [side]: currentlyOn ? NO_BORDER : solidBorder() });
+  };
+
+  const sideActive = (side) => (
+    noBordersActive ? false : cellAttrs[side] !== NO_BORDER
+  );
 
   const submitPlaceholder = () => {
     const ok = onAddPlaceholder?.(phDraft);
@@ -415,12 +566,6 @@ function DesignerSidebar({
                   <span className="text-xs text-slate-600">Star as default template</span>
                   <Switch checked={isDefault} onChange={setIsDefault} size="small" />
                 </div>
-                <Input.TextArea
-                  rows={2}
-                  placeholder="Description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                />
               </div>
             ),
           },
@@ -558,11 +703,48 @@ function DesignerSidebar({
                   <ToolBtn title="Split cell" disabled={!inTable} icon={<SplitCellsOutlined />} onClick={() => editor?.chain().focus().splitCell().run()} />
                 </div>
                 <div className="flex flex-wrap gap-1 rounded-md bg-slate-50 p-1">
-                  <ToolBtn title="All borders" active disabled={!inTable} icon={<BorderOutlined />} onClick={() => {}} />
-                  <ToolBtn title="Top border" disabled={!inTable} icon={<BorderTopOutlined />} onClick={() => {}} />
-                  <ToolBtn title="Bottom border" disabled={!inTable} icon={<BorderBottomOutlined />} onClick={() => {}} />
-                  <ToolBtn title="Left border" disabled={!inTable} icon={<BorderLeftOutlined />} onClick={() => {}} />
-                  <ToolBtn title="Right border" disabled={!inTable} icon={<BorderRightOutlined />} onClick={() => {}} />
+                  <ToolBtn
+                    title="All borders"
+                    active={allBordersActive}
+                    disabled={!inTable}
+                    icon={<BorderOutlined />}
+                    onClick={applyAllBorders}
+                  />
+                  <ToolBtn
+                    title="No borders"
+                    active={noBordersActive}
+                    disabled={!inTable}
+                    icon={<NoBorderIcon />}
+                    onClick={applyNoBorders}
+                  />
+                  <ToolBtn
+                    title="Top border"
+                    active={sideActive('borderTop')}
+                    disabled={!inTable}
+                    icon={<BorderTopOutlined />}
+                    onClick={() => toggleSideBorder('borderTop')}
+                  />
+                  <ToolBtn
+                    title="Bottom border"
+                    active={sideActive('borderBottom')}
+                    disabled={!inTable}
+                    icon={<BorderBottomOutlined />}
+                    onClick={() => toggleSideBorder('borderBottom')}
+                  />
+                  <ToolBtn
+                    title="Left border"
+                    active={sideActive('borderLeft')}
+                    disabled={!inTable}
+                    icon={<BorderLeftOutlined />}
+                    onClick={() => toggleSideBorder('borderLeft')}
+                  />
+                  <ToolBtn
+                    title="Right border"
+                    active={sideActive('borderRight')}
+                    disabled={!inTable}
+                    icon={<BorderRightOutlined />}
+                    onClick={() => toggleSideBorder('borderRight')}
+                  />
                 </div>
                 <div>
                   <div className="designer-field-label">Vertical align</div>
@@ -588,8 +770,18 @@ function DesignerSidebar({
                       type="color"
                       className="ml-auto h-5 w-5 cursor-pointer border-0 bg-transparent p-0"
                       disabled={!inTable}
-                      defaultValue="#cbd5e1"
-                      onChange={() => {}}
+                      value={borderColor}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setBorderColor(next);
+                        if (!inTable) return;
+                        const value = `1px solid ${next}`;
+                        const patch = {};
+                        BORDER_SIDES.forEach((side) => {
+                          if (cellAttrs[side] !== NO_BORDER) patch[side] = value;
+                        });
+                        if (Object.keys(patch).length) patchSelectedCells(patch);
+                      }}
                     />
                   </label>
                 </div>
@@ -604,7 +796,6 @@ function DesignerSidebar({
 
 export default function ReportTemplateEditor({ templateId = null, onBack, onSaved }) {
   const [name, setName] = useState('Untitled template');
-  const [description, setDescription] = useState('');
   const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(Boolean(templateId));
@@ -650,7 +841,6 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
 
   const buildSnapshot = () => JSON.stringify({
     name: name.trim(),
-    description: description || '',
     isDefault: Boolean(isDefault),
     pageSettings,
     header: headerEditor?.getHTML() || '',
@@ -685,7 +875,6 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
         if (cancelled) return;
         setExistingId(data.id);
         setName(data.name || 'Untitled template');
-        setDescription(data.description || '');
         setIsDefault(Boolean(data.is_default));
         const td = data.template_data || {};
         setPageSettings((prev) => ({
@@ -819,7 +1008,7 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
       );
       const payload = {
         name: name.trim(),
-        description: description || null,
+        description: null,
         is_default: isDefault,
         is_standard: false,
         template_data: {
@@ -877,19 +1066,53 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
 
   const buildDocumentHtml = () => {
     const m = pageSettings.margins;
+    const headerHtml = preserveBlankParagraphs(headerEditor?.getHTML() || '');
+    const bodyHtml = preserveBlankParagraphs(bodyEditor?.getHTML() || '');
+    const footerHtml = preserveBlankParagraphs(footerEditor?.getHTML() || '');
+    const pagePxLocal = pagePixelSize(pageSettings);
+    const contentH = Math.max(
+      40,
+      pagePxLocal.hMm - Number(m.top || 0) - Number(m.bottom || 0),
+    );
     return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${name}</title>
 <style>
   @page { size: ${pageSettings.pageSize} ${pageSettings.orientation}; margin: ${m.top}mm ${m.right}mm ${m.bottom}mm ${m.left}mm; }
-  body { font-family: ${pageSettings.fontFamily || 'Times New Roman'}, Arial, sans-serif; font-size: ${pageSettings.fontSize || '12px'}; color: #0f172a; }
-  table { border-collapse: collapse; width: 100%; }
-  td, th { border: 1px solid #000; padding: 4px 6px; vertical-align: top; background: #fff; }
-  th { background: #fff; font-weight: 600; }
-  img { max-width: 100%; height: auto; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: ${pageSettings.fontFamily || 'Times New Roman'}, Arial, sans-serif;
+    font-size: ${pageSettings.fontSize || '12px'};
+    color: #000;
+    line-height: 1.35;
+  }
+  .doc-page {
+    min-height: ${contentH}mm;
+    display: flex;
+    flex-direction: column;
+  }
+  .doc-header { flex-shrink: 0; }
+  .doc-body {
+    flex: 1 1 auto;
+    margin: ${pageSettings.headerSpacing || 0}mm 0 ${pageSettings.footerSpacing || 0}mm;
+  }
+  .doc-footer { flex-shrink: 0; margin-top: auto; }
+  table { border-collapse: collapse; border-spacing: 0; width: 100%; margin: 0; }
+  td, th { border: 1px solid #000; padding: 3px 6px; vertical-align: top; background: #fff; }
+  th { font-weight: 600; }
+  td[style*="border-top: none"], th[style*="border-top: none"] { border-top: none !important; }
+  td[style*="border-right: none"], th[style*="border-right: none"] { border-right: none !important; }
+  td[style*="border-bottom: none"], th[style*="border-bottom: none"] { border-bottom: none !important; }
+  td[style*="border-left: none"], th[style*="border-left: none"] { border-left: none !important; }
+  p { margin: 0; line-height: 1.35; min-height: 1.35em; }
+  p:empty::before { content: '\\00a0'; }
+  img { max-width: 100%; height: auto; display: block; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
-  <div>${headerEditor?.getHTML() || ''}</div>
-  <div style="margin:${pageSettings.headerSpacing}mm 0">${bodyEditor?.getHTML() || ''}</div>
-  <div>${footerEditor?.getHTML() || ''}</div>
+  <div class="doc-page">
+    <div class="doc-header">${headerHtml}</div>
+    <div class="doc-body">${bodyHtml}</div>
+    <div class="doc-footer">${footerHtml}</div>
+  </div>
 </body></html>`;
   };
 
@@ -920,69 +1143,42 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
     ));
   };
 
-  const exportPdf = () => {
-    const orient = pageSettings.orientation === 'landscape' ? 'landscape' : 'portrait';
-    const sizeKey = String(pageSettings.pageSize || 'A4').toLowerCase();
-    const format = ['a3', 'a4', 'a5', 'letter', 'legal'].includes(sizeKey)
-      ? sizeKey
-      : 'a4';
-    const doc = new jsPDF({ orientation: orient, unit: 'mm', format });
-    const pageW = doc.internal.pageSize.getWidth();
-    const pageH = doc.internal.pageSize.getHeight();
-    const m = pageSettings.margins;
-    const maxW = pageW - m.left - m.right;
-    let y = m.top;
-
-    const ensureSpace = (need = 8) => {
-      if (y + need > pageH - m.bottom) {
-        doc.addPage();
-        y = m.top;
+  const exportPdf = async () => {
+    const html = buildDocumentHtml();
+    const filename = datedFilename(
+      name.replace(/\s+/g, '-').toLowerCase() || 'template',
+      'pdf',
+    );
+    try {
+      const { data } = await api.post(
+        '/pdf/render',
+        {
+          html,
+          page_size: pageSettings.pageSize || 'A4',
+          orientation: pageSettings.orientation || 'portrait',
+          margins: pageSettings.margins,
+          filename,
+        },
+        { responseType: 'blob' },
+      );
+      const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' });
+      if (blob.type && blob.type.includes('json')) {
+        throw new Error(await blob.text());
       }
-    };
-
-    const writeBlock = (title, html) => {
-      const text = stripHtml(html);
-      if (!text && !extractTables(html).length) return;
-      ensureSpace(12);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(11);
-      doc.setTextColor(15, 118, 110);
-      doc.text(title, m.left, y);
-      y += 6;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
-      doc.setTextColor(15, 23, 42);
-      if (text) {
-        const lines = doc.splitTextToSize(text, maxW);
-        lines.forEach((line) => {
-          ensureSpace(6);
-          doc.text(line, m.left, y);
-          y += 5;
-        });
-        y += 2;
-      }
-      extractTables(html).forEach((matrix) => {
-        if (!matrix.length) return;
-        ensureSpace(20);
-        autoTable(doc, {
-          startY: y,
-          head: matrix[0] ? [matrix[0]] : undefined,
-          body: matrix.slice(1),
-          margin: { left: m.left, right: m.right },
-          styles: { fontSize: 8, cellPadding: 2 },
-          headStyles: { fillColor: [13, 148, 136] },
-        });
-        y = (doc.lastAutoTable?.finalY || y) + 6;
-      });
-      y += 4;
-    };
-
-    writeBlock('Header', headerEditor?.getHTML() || '');
-    writeBlock('Body', bodyEditor?.getHTML() || '');
-    writeBlock('Footer', footerEditor?.getHTML() || '');
-
-    doc.save(datedFilename(name.replace(/\s+/g, '-').toLowerCase() || 'template', 'pdf'));
-    message.success('PDF downloaded');
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      message.success('PDF downloaded');
+    } catch (error) {
+      // Fallback to print (same Chromium layout)
+      exportPrintTemplate();
+      message.warning(error?.message || 'Opened print dialog — Save as PDF');
+    }
   };
 
   const exportExcel = () => {
@@ -1103,8 +1299,6 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
           setPageSettings={setPageSettings}
           isDefault={isDefault}
           setIsDefault={setIsDefault}
-          description={description}
-          setDescription={setDescription}
           placeholders={placeholders}
           onInsertPlaceholder={insertPlaceholder}
           onAddPlaceholder={addPlaceholder}
@@ -1164,6 +1358,8 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
         width={460}
         onCancel={() => setLeaveOpen(false)}
         destroyOnHidden
+        maskClosable={false}
+        keyboard={false}
       >
         <div className="flex gap-3 pr-2">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xl text-orange-500">

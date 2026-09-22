@@ -1,12 +1,19 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 
 from app.api.deps import DbSession, Pagination, require_permission
+from app.core.exceptions import AppError
 from app.models import User
 from app.schemas.activity import ActivityCreate, ActivityResponse, ActivityUpdate
 from app.schemas.common import MessageResponse, PaginatedResponse
+from app.schemas.spreadsheet_import import (
+    SpreadsheetConfirmRequest,
+    SpreadsheetImportResponse,
+    SpreadsheetPreviewResponse,
+)
 from app.services.catalog import activity_service
+from app.services.catalog_import import catalog_import_service
 
 router = APIRouter()
 
@@ -24,6 +31,38 @@ def list_activities(
         pagination["page"],
         pagination["page_size"],
     )
+
+
+@router.post("/import/preview", response_model=SpreadsheetPreviewResponse)
+async def preview_activities_import(
+    db: DbSession,
+    current_user: User = Depends(require_permission("activities:create")),
+    file: UploadFile = File(...),
+) -> SpreadsheetPreviewResponse:
+    filename = file.filename or "upload.xlsx"
+    data = await file.read()
+    if not data:
+        raise AppError("Empty file", status_code=400, code="empty_file")
+    preview = catalog_import_service.preview_activities(db, current_user, data, filename)
+    if not preview["rows"]:
+        raise AppError(
+            "No valid activity rows found (need Activity Code). Only columns already defined in the app are extracted.",
+            status_code=400,
+            code="empty_preview",
+        )
+    return SpreadsheetPreviewResponse(**preview)
+
+
+@router.post("/import/confirm", response_model=SpreadsheetImportResponse)
+def confirm_activities_import(
+    payload: SpreadsheetConfirmRequest,
+    db: DbSession,
+    current_user: User = Depends(require_permission("activities:create")),
+) -> SpreadsheetImportResponse:
+    if not payload.rows:
+        raise AppError("No rows to import", status_code=400, code="empty_import")
+    result = catalog_import_service.confirm_activities(db, current_user, payload.rows)
+    return SpreadsheetImportResponse.from_result(result, "Activities")
 
 
 @router.post("", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Tooltip, Upload, message,
+  Button, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Tooltip, message,
 } from 'antd';
 import {
   PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
@@ -11,22 +11,15 @@ import { api, getApiErrorMessage } from '../../config/auth.js';
 import { useAuth } from '../../config/AuthContext.jsx';
 import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
+import BulkUploadModal from '../../Components/BulkUploadModal';
 import BulkReviewModal from '../../Components/BulkReviewModal';
-import { slugCode, slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
-import { datedFilename, downloadReportExcel, downloadReportPdf, parseSpreadsheetFile } from '../../utils/spreadsheet';
+import { slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
+import { datedFilename, downloadReportExcel, downloadReportPdf } from '../../utils/spreadsheet';
 import {
-  builtinAliases,
   getActivityBuiltinColumns,
   getAllActivityBuiltinColumnsIncludingHidden,
   readActivityBuiltinValue,
 } from '../../utils/activityColumns.js';
-
-function pick(row, ...keys) {
-  for (const key of keys) {
-    if (row[key] != null && String(row[key]).trim() !== '') return row[key];
-  }
-  return '';
-}
 
 export default function Activities() {
   const { user } = useAuth();
@@ -40,8 +33,11 @@ export default function Activities() {
   const [pageSize, setPageSize] = useState(10);
   const [createOpen, setCreateOpen] = useState(false);
   const [columnOpen, setColumnOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
+  const [previewColumns, setPreviewColumns] = useState([]);
+  const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [form] = Form.useForm();
@@ -214,109 +210,39 @@ export default function Activities() {
     }
   };
 
-  const mapSheetToPreview = (rawRows) => rawRows.map((row, index) => {
-    const mapped = {
-      _key: `act-${index}`,
-      code: String(pick(
-        row,
-        'code', 'Code', 'Activity Code', 'activity_code',
-        'Sl.No.', 'Sl.No', 'Sl No', 'SL.NO.', 'S.No.', 'S.No', 'SNo',
-      )).trim(),
-    };
-    builtinFields.forEach((col) => {
-      const aliases = builtinAliases(col);
-      if (col.field_key === 'unit_price') {
-        mapped.unit_price = Number(pick(row, ...aliases) || 0);
-      } else {
-        mapped[col.field_key] = String(pick(row, ...aliases)).trim();
-      }
-    });
-    // Metrology / price-list style headers + defaults
-    if (!mapped.name) {
-      mapped.name = String(pick(row, 'name', 'Name', 'Particulars', 'particulars', 'Item', 'Description')).trim();
-    }
-    if (!mapped.description) {
-      mapped.description = String(pick(
-        row,
-        'description', 'Description', 'Specifications', 'Specification',
-        'Scope of Calibration', 'particulars',
-      )).trim();
-    }
-    if (!mapped.unit) mapped.unit = String(pick(row, 'unit', 'Unit') || 'Nos').trim();
-    if (!mapped.unit_price) {
-      mapped.unit_price = Number(pick(
-        row,
-        'unit_price', 'Unit Price', 'Proposed Charges 2023', 'Proposed Charges',
-        'Charges April 2020', 'Charges', 'cost', 'Cost', 'Rate', 'Price',
-      ) || 0);
-    }
-
-    customFields.forEach((f) => {
-      mapped[f.field_key] = pick(row, f.field_label, f.field_key);
-    });
-    // Keep leftover price-list columns in custom-looking keys for review
-    Object.keys(row).forEach((key) => {
-      if (key === '_sheet' || key.startsWith('Column_')) return;
-      const lower = key.toLowerCase();
-      if (
-        lower.includes('nabl')
-        || lower.includes('increase')
-        || lower.includes('scope')
-        || lower.includes('charge')
-      ) {
-        if (mapped[key] == null || mapped[key] === '') mapped[key] = row[key];
-      }
-    });
-    if (!mapped.name) mapped.name = mapped.code;
-    if (!mapped.unit) mapped.unit = 'Nos';
-    return mapped;
-  }).filter((r) => {
-    const code = String(r.code || '').trim();
-    if (!code) return false;
-    const lower = code.toLowerCase();
-    return !(lower.includes('sl.no') || lower === 'sl no' || lower === 's.no');
-  });
-
   const onBulkUpload = async (file) => {
+    setImporting(true);
     try {
-      const parsed = await parseSpreadsheetFile(file);
-      const mapped = mapSheetToPreview(parsed);
-      if (!mapped.length) {
-        message.error('No valid activity rows found (need Activity Code)');
-        return false;
-      }
-      setPreviewRows(mapped);
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await api.post('/activities/import/preview', formData);
+      setPreviewColumns(data?.columns || []);
+      setPreviewRows(data?.rows || []);
+      setUploadOpen(false);
       setReviewOpen(true);
     } catch (error) {
-      message.error(getApiErrorMessage(error, 'Failed to read file'));
+      message.error(getApiErrorMessage(error, 'Failed to extract file'));
+    } finally {
+      setImporting(false);
     }
     return false;
   };
 
-  const bulkCreate = async (selected) => {
-    let created = 0;
+  const confirmBulkImport = async (selected) => {
     try {
-      for (const row of selected) {
-        const code = String(row.code || '').trim();
-        await api.post('/activities', {
-          code: created ? `${slugCode(code)}-${created}`.slice(0, 50) : code.slice(0, 50),
-          name: String(row.name || code).trim(),
-          description: row.description || null,
-          unit: row.unit || 'Nos',
-          unit_price: Number(row.unit_price || 0),
-          currency: 'INR',
-          is_active: true,
-          custom_data: buildCustomData(row),
-        });
-        created += 1;
+      const { data } = await api.post('/activities/import/confirm', { rows: selected });
+      message.success(data?.message || 'Import completed');
+      if (data?.errors?.length) {
+        message.warning(`${data.errors.length} row(s) had errors`);
       }
-      message.success(`Created ${created} activit${created === 1 ? 'y' : 'ies'}`);
       setReviewOpen(false);
       setPreviewRows([]);
+      setPreviewColumns([]);
       setPage(1);
-      load();
+      await load();
     } catch (error) {
-      message.error(getApiErrorMessage(error, `Bulk create stopped after ${created}`));
+      message.error(getApiErrorMessage(error, 'Import failed'));
+      throw error;
     }
   };
 
@@ -330,23 +256,6 @@ export default function Activities() {
     });
     return row;
   });
-
-  const reviewColumns = useMemo(() => [
-    { key: 'code', title: 'Activity Code', required: true, width: 140 },
-    ...builtinFields.map((col) => ({
-      key: col.field_key,
-      title: col.field_label,
-      required: Boolean(col.is_required),
-      type: col.field_key === 'unit_price' ? 'number' : 'text',
-      width: 140,
-    })),
-    ...customFields.map((f) => ({
-      key: f.field_key,
-      title: f.field_label,
-      required: Boolean(f.is_required),
-      width: 140,
-    })),
-  ], [builtinFields, customFields]);
 
   const renderBuiltinCell = (col, record) => {
     const raw = readActivityBuiltinValue(record, col.field_key);
@@ -385,6 +294,7 @@ export default function Activities() {
       ),
       dataIndex: 'code',
       fixed: 'left',
+      sorter: (a, b) => String(a.code || '').localeCompare(String(b.code || '')),
       render: (v, record) => (
         editingId === record.id
           ? <Input value={draft.code} onChange={(e) => setField('code', e.target.value)} />
@@ -399,6 +309,15 @@ export default function Activities() {
         </span>
       ),
       key: col.field_key,
+      sorter: (a, b) => {
+        const av = col.field_key === 'unit_price'
+          ? Number(a.unit_price || 0)
+          : String(a[col.field_key] ?? '');
+        const bv = col.field_key === 'unit_price'
+          ? Number(b.unit_price || 0)
+          : String(b[col.field_key] ?? '');
+        return typeof av === 'number' ? av - bv : av.localeCompare(bv);
+      },
       render: (_, record) => renderBuiltinCell(col, record),
     })),
     ...customFields.map((f) => ({
@@ -409,6 +328,8 @@ export default function Activities() {
         </span>
       ),
       key: f.field_key,
+      sorter: (a, b) => String(a.custom_data?.[f.field_key] ?? '')
+        .localeCompare(String(b.custom_data?.[f.field_key] ?? '')),
       render: (_, record) => (
         editingId === record.id
           ? (
@@ -462,9 +383,13 @@ export default function Activities() {
             <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
               Columns
             </Button>
-            <Upload accept=".xlsx,.xls,.csv" showUploadList={false} beforeUpload={onBulkUpload}>
-              <Button icon={<UploadOutlined />}>Bulk upload</Button>
-            </Upload>
+            <Button
+              icon={<UploadOutlined />}
+              loading={importing}
+              onClick={() => setUploadOpen(true)}
+            >
+              Bulk upload
+            </Button>
             <Dropdown
               menu={{
                 items: [
@@ -474,7 +399,7 @@ export default function Activities() {
                     label: 'Download as Excel',
                     onClick: () => downloadReportExcel(
                       toExportRows(filtered),
-                      datedFilename('activities', 'xls'),
+                      datedFilename('activities', 'xlsx'),
                       { organizationName: orgName, title: 'Activities Report' },
                     ),
                   },
@@ -512,6 +437,7 @@ export default function Activities() {
 
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <Table
+          className="app-data-table"
           rowKey="id"
           loading={loading}
           columns={columns}
@@ -540,6 +466,8 @@ export default function Activities() {
         onOk={create}
         okText="Save"
         destroyOnHidden
+        maskClosable={false}
+        keyboard={false}
       >
         <Form form={form} layout="vertical" initialValues={{ unit: 'Nos', unit_price: 0 }}>
           <Form.Item name="code" label="Activity Code" rules={[{ required: true, message: 'Required' }]}>
@@ -570,20 +498,6 @@ export default function Activities() {
         </Form>
       </Modal>
 
-      <BulkReviewModal
-        open={reviewOpen}
-        onClose={() => {
-          setReviewOpen(false);
-          setPreviewRows([]);
-        }}
-        title="Review Extracted Activities"
-        columns={reviewColumns}
-        rows={previewRows}
-        entityLabel="activities"
-        confirmLabel="Bulk Create"
-        onConfirm={bulkCreate}
-      />
-
       <ManageColumnsModal
         open={columnOpen}
         onClose={() => setColumnOpen(false)}
@@ -594,6 +508,62 @@ export default function Activities() {
           refreshColumns();
           load();
         }}
+      />
+
+      <BulkUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        title="Upload Activities from Excel"
+        loading={importing}
+        onFile={onBulkUpload}
+        hint={(
+          <>
+            Upload an
+            {' '}
+            <strong>.xlsx</strong>
+            ,
+            {' '}
+            <strong>.xls</strong>
+            ,
+            {' '}
+            <strong>.xlsm</strong>
+            , or
+            {' '}
+            <strong>.csv</strong>
+            {' '}
+            file. Only columns already defined in the app are extracted
+            (
+            <strong>Activity Code</strong>
+            ,
+            {' '}
+            <strong>Name / Specification</strong>
+            ,
+            {' '}
+            <strong>Description / Particulars</strong>
+            ,
+            {' '}
+            <strong>Unit</strong>
+            ,
+            {' '}
+            <strong>Cost</strong>
+            , plus any custom columns you added). Extra spreadsheet columns are ignored. You will review a preview before import.
+          </>
+        )}
+      />
+
+      <BulkReviewModal
+        open={reviewOpen}
+        onClose={() => {
+          setReviewOpen(false);
+          setPreviewRows([]);
+          setPreviewColumns([]);
+        }}
+        title="Review Extracted Activities"
+        columns={previewColumns}
+        rows={previewRows}
+        entityLabel="activities"
+        confirmLabel="Import selected"
+        onConfirm={confirmBulkImport}
       />
     </div>
   );

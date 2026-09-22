@@ -179,17 +179,23 @@ export default function Team() {
     {
       title: 'Name',
       dataIndex: 'full_name',
+      sorter: (a, b) => String(a.full_name || '').localeCompare(String(b.full_name || '')),
       render: (v, record) => (
         editingId === record.id
           ? <Input value={draft.full_name} onChange={(e) => setField('full_name', e.target.value)} />
           : v
       ),
     },
-    { title: 'Email', dataIndex: 'email' },
+    {
+      title: 'Email',
+      dataIndex: 'email',
+      sorter: (a, b) => String(a.email || '').localeCompare(String(b.email || '')),
+    },
     {
       title: 'Role',
       dataIndex: 'role_name',
       width: 140,
+      sorter: (a, b) => String(a.role_name || '').localeCompare(String(b.role_name || '')),
       render: (v, record) => (
         editingId === record.id
           ? (
@@ -209,6 +215,7 @@ export default function Team() {
     {
       title: 'Phone',
       dataIndex: 'phone',
+      sorter: (a, b) => String(a.phone || '').localeCompare(String(b.phone || '')),
       render: (v, record) => (
         editingId === record.id
           ? (
@@ -280,9 +287,6 @@ export default function Team() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
-      <Typography.Title level={3} className="!mb-0 !font-sans !text-teal-800">
-        Team
-      </Typography.Title>
 
       <TableToolbar
         search={search}
@@ -313,6 +317,7 @@ export default function Team() {
 
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <Table
+          className="app-data-table"
           rowKey="id"
           loading={loading}
           dataSource={paged}
@@ -341,6 +346,8 @@ export default function Team() {
         onOk={create}
         okText="Create"
         destroyOnHidden
+        maskClosable={false}
+        keyboard={false}
       >
         <Form form={form} layout="vertical" initialValues={{ role_name: 'USER' }}>
           <Form.Item name="full_name" label="Full name" rules={[{ required: true }]}>

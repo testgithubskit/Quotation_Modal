@@ -15,6 +15,7 @@ from app.routers import (
     custom_fields,
     customers,
     organizations,
+    pdf_render,
     permissions,
     quotation_templates,
     quotations,
@@ -86,6 +87,7 @@ app.include_router(
 )
 app.include_router(custom_fields.router, prefix=f"{prefix}/custom-fields", tags=["Custom Fields"])
 app.include_router(audit_logs.router, prefix=f"{prefix}/audit-logs", tags=["Audit Logs"])
+app.include_router(pdf_render.router, prefix=f"{prefix}/pdf", tags=["PDF"])
 
 
 @app.get("/health", tags=["Health"])

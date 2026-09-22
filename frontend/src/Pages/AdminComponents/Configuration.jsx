@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Col, Form, Input, Row, Space, Spin, Typography, message } from 'antd';
-import { ColumnHeightOutlined, SaveOutlined } from '@ant-design/icons';
+import { ColumnHeightOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { useAuth } from '../../config/AuthContext.jsx';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
@@ -9,6 +9,7 @@ export default function Configuration() {
   const { refreshMe } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [fields, setFields] = useState([]);
   const [columnOpen, setColumnOpen] = useState(false);
   const [form] = Form.useForm();
@@ -17,6 +18,21 @@ export default function Configuration() {
     () => fields.filter((f) => f.entity_type === 'ORGANIZATION'),
     [fields],
   );
+
+  const applyOrgToForm = (org, customItems) => {
+    setFields(customItems || []);
+    form.setFieldsValue({
+      name: org.name,
+      code: org.code,
+      email: org.email,
+      phone: org.phone,
+      website: org.website,
+      tax_number: org.tax_number,
+      address: org.address,
+      notes: org.notes,
+      ...(org.custom_data || {}),
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -28,18 +44,7 @@ export default function Configuration() {
           api.get('/custom-fields', { params: { entity_type: 'ORGANIZATION' } }).then((r) => r.data),
         ]);
         if (cancelled) return;
-        setFields(custom.items || []);
-        form.setFieldsValue({
-          name: org.name,
-          code: org.code,
-          email: org.email,
-          phone: org.phone,
-          website: org.website,
-          tax_number: org.tax_number,
-          address: org.address,
-          notes: org.notes,
-          ...(org.custom_data || {}),
-        });
+        applyOrgToForm(org, custom.items || []);
       } catch (error) {
         if (!cancelled) message.error(getApiErrorMessage(error, 'Failed to load company settings'));
       } finally {
@@ -59,23 +64,17 @@ export default function Configuration() {
         api.get('/organizations/me').then((r) => r.data),
         api.get('/custom-fields', { params: { entity_type: 'ORGANIZATION' } }).then((r) => r.data),
       ]);
-      setFields(custom.items || []);
-      form.setFieldsValue({
-        name: org.name,
-        code: org.code,
-        email: org.email,
-        phone: org.phone,
-        website: org.website,
-        tax_number: org.tax_number,
-        address: org.address,
-        notes: org.notes,
-        ...(org.custom_data || {}),
-      });
+      applyOrgToForm(org, custom.items || []);
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to load company settings'));
     } finally {
       if (!quiet) setLoading(false);
     }
+  };
+
+  const cancelEdit = async () => {
+    setEditing(false);
+    await load({ quiet: true });
   };
 
   const save = async () => {
@@ -100,6 +99,7 @@ export default function Configuration() {
       });
       await refreshMe();
       message.success('Company details saved');
+      setEditing(false);
       load({ quiet: true });
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Save failed'));
@@ -129,14 +129,32 @@ export default function Configuration() {
               <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
                 Columns
               </Button>
-              <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={save}>
+              <Button
+                icon={<EditOutlined />}
+                disabled={editing}
+                onClick={() => setEditing(true)}
+              >
+                Edit
+              </Button>
+              <Button
+                type="primary"
+                icon={<SaveOutlined />}
+                loading={saving}
+                disabled={!editing}
+                onClick={save}
+              >
                 Save
               </Button>
+              {editing ? (
+                <Button onClick={cancelEdit} disabled={saving}>
+                  Cancel
+                </Button>
+              ) : null}
             </Space>
           </div>
 
           <Card className="border-slate-200 shadow-sm">
-            <Form form={form} layout="vertical">
+            <Form form={form} layout="vertical" disabled={!editing}>
               <Row gutter={[24, 0]}>
                 <Col xs={24} md={12}>
                   <Form.Item name="name" label="Company name" rules={[{ required: true }]}>

@@ -3,17 +3,13 @@ import {
   Typography, Form, Row, Col, Card, Button, Space,
   Input, InputNumber, Select, Tooltip, message,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined, ColumnHeightOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
-import ReportAddFieldModal from '../../Components/ReportAddFieldModal';
-import { DynamicFormField, serializeDynamicValues } from '../../Components/DynamicFormField';
-import {
-  loadReportFormSchema,
-  addSchemaField,
-  removeSchemaField,
-} from '../../utils/reportFormSchema.js';
+import { DynamicFormField } from '../../Components/DynamicFormField';
+import { DEFAULT_REPORT_HEADER_FIELDS } from '../../utils/reportFormSchema.js';
+import { resolveTemplateExtraFields } from '../../utils/reportPlaceholders.js';
 import {
   digitsOnlyPhone,
   phoneFieldRules,
@@ -51,23 +47,17 @@ export default function GenerateReport() {
   const [activities, setActivities] = useState([]);
   const [starredTemplate, setStarredTemplate] = useState(null);
   const [activityCustomFields, setActivityCustomFields] = useState([]);
-  const [schema, setSchema] = useState(() => loadReportFormSchema());
   const [items, setItems] = useState([emptyItem()]);
   const [activeKey, setActiveKey] = useState(() => items[0]?.key);
   const [saving, setSaving] = useState(false);
-  const [headerFieldsOpen, setHeaderFieldsOpen] = useState(false);
-  const [customerFieldsOpen, setCustomerFieldsOpen] = useState(false);
-  const [termsFieldsOpen, setTermsFieldsOpen] = useState(false);
   const [activityNotes, setActivityNotes] = useState([
     { key: nextKey(), value: 'Quoted price are per each qty / Parameter.' },
   ]);
 
-  const headerFields = schema.reportHeaderFields;
-  const reportCustomerFields = schema.reportCustomerFields;
-  const termsFieldDefs = schema.reportTermsFields;
-  const customTermsFields = useMemo(
-    () => termsFieldDefs.filter((f) => !f.builtIn),
-    [termsFieldDefs],
+  const headerFields = DEFAULT_REPORT_HEADER_FIELDS;
+  const templateExtraFields = useMemo(
+    () => resolveTemplateExtraFields(starredTemplate),
+    [starredTemplate],
   );
 
   useEffect(() => {
@@ -84,7 +74,15 @@ export default function GenerateReport() {
         setCustomers(c.items || []);
         setActivities(a.items || []);
         const defaultTpl = (t.items || []).find((x) => x.is_default) || null;
-        setStarredTemplate(defaultTpl);
+        let fullTpl = defaultTpl;
+        if (defaultTpl?.id) {
+          try {
+            fullTpl = await api.get(`/quotation-templates/${defaultTpl.id}`).then((r) => r.data);
+          } catch {
+            fullTpl = defaultTpl;
+          }
+        }
+        setStarredTemplate(fullTpl);
         setActivityCustomFields(
           (af.items || []).map((f) => ({
             key: f.field_key,
@@ -99,7 +97,7 @@ export default function GenerateReport() {
         form.setFieldsValue({
           date: dayjs(),
         });
-        if (!defaultTpl) {
+        if (!fullTpl) {
           message.warning('No starred template set. Ask an admin to star a template in Report Design.');
         }
       } catch (error) {
@@ -165,16 +163,12 @@ export default function GenerateReport() {
   const handleCustomerSelect = (customerId) => {
     const customer = findCustomer(customerId);
     if (!customer) return;
-    const patch = {
+    form.setFieldsValue({
       contactPerson: customer.name,
       companyName: customer.notes || '',
       mobileNumber: customer.phone || '',
       emailId: customer.email || '',
-    };
-    reportCustomerFields.forEach((f) => {
-      patch[f.key] = customer.custom_data?.[f.key];
     });
-    form.setFieldsValue(patch);
   };
 
   const setItemField = (key, patch) => {
@@ -359,6 +353,13 @@ export default function GenerateReport() {
       ? values.date.toDate().toISOString()
       : (values.date ? new Date(values.date).toISOString() : new Date().toISOString());
 
+    const placeholderFields = {};
+    templateExtraFields.forEach((f) => {
+      const val = values[f.key];
+      if (val == null || val === '') return;
+      placeholderFields[f.key] = val?.format ? val.format('DD/MM/YYYY') : val;
+    });
+
     setSaving(true);
     try {
       const payload = {
@@ -376,10 +377,9 @@ export default function GenerateReport() {
           companyName: values.companyName || null,
           mobileNumber: values.mobileNumber || null,
           emailId: values.emailId || null,
-          customerFields: serializeDynamicValues(reportCustomerFields, values),
+          placeholderFields,
           activityNotes: activityNotes.map((n) => n.value).filter(Boolean),
           termsAndConditions: values.termsAndConditions || null,
-          termsFields: serializeDynamicValues(customTermsFields, values),
           activities: validItems.map((r) => ({
             key: r.key,
             activityId: r.activityId,
@@ -618,11 +618,10 @@ export default function GenerateReport() {
         styles={{ body: { paddingBottom: 32 } }}
       >
         <Form form={form} layout="vertical" initialValues={{ date: dayjs() }}>
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2">
             <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
               Report Details
             </Typography.Title>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setHeaderFieldsOpen(true)}>Add Field</Button>
           </div>
           <Row gutter={16}>
             {headerFields.map((field) => (
@@ -632,11 +631,10 @@ export default function GenerateReport() {
             ))}
           </Row>
 
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-4">
             <Typography.Title level={5} className="!mb-0 !border-b !border-slate-200 !pb-2 !text-[15px] !font-semibold !text-slate-800">
               Customer Information
             </Typography.Title>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setCustomerFieldsOpen(true)}>Add Field</Button>
           </div>
 
           <Row gutter={16} className="mt-2">
@@ -660,7 +658,6 @@ export default function GenerateReport() {
                         companyName: undefined,
                         mobileNumber: undefined,
                         emailId: undefined,
-                        ...Object.fromEntries(reportCustomerFields.map((f) => [f.key, undefined])),
                       });
                     }
                   }}
@@ -669,8 +666,8 @@ export default function GenerateReport() {
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={6}>
-              <Form.Item name="contactPerson" label="Contact Person">
-                <Input placeholder="Enter contact person name" />
+              <Form.Item name="contactPerson" label="Customer Name">
+                <Input placeholder="Enter customer name" />
               </Form.Item>
             </Col>
             <Col xs={24} sm={12} md={6}>
@@ -695,16 +692,6 @@ export default function GenerateReport() {
             </Col>
           </Row>
 
-          {reportCustomerFields.length > 0 && (
-            <Row gutter={16}>
-              {reportCustomerFields.map((field) => (
-                <Col xs={24} sm={12} md={6} key={field.key}>
-                  <DynamicFormField field={field} />
-                </Col>
-              ))}
-            </Row>
-          )}
-
           <Form.Item
             name="subject"
             label="Subject"
@@ -712,6 +699,26 @@ export default function GenerateReport() {
           >
             <Input placeholder="e.g. Quotation for the Calibration charges of Slip Gauges, Angle Gauges" />
           </Form.Item>
+
+          {templateExtraFields.length > 0 ? (
+            <>
+              <div className="mb-2 mt-2">
+                <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
+                  Template fields
+                </Typography.Title>
+                <Typography.Text type="secondary" className="text-xs">
+                  Extra placeholders from the starred template
+                </Typography.Text>
+              </div>
+              <Row gutter={16}>
+                {templateExtraFields.map((field) => (
+                  <Col xs={24} sm={12} md={6} key={field.key}>
+                    <DynamicFormField field={field} />
+                  </Col>
+                ))}
+              </Row>
+            </>
+          ) : null}
 
           <div className="mb-3 flex items-center justify-between">
             <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
@@ -793,26 +800,15 @@ export default function GenerateReport() {
             </div>
           ))}
 
-          <div className="mb-3 mt-6 flex items-center justify-between gap-4">
+          <div className="mb-3 mt-6">
             <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
               Terms &amp; Conditions
             </Typography.Title>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setTermsFieldsOpen(true)}>Add Field</Button>
           </div>
 
           <Form.Item name="termsAndConditions" label="Terms and Conditions">
             <Input.TextArea rows={3} placeholder="Enter terms and conditions" />
           </Form.Item>
-
-          {customTermsFields.length > 0 && (
-            <Row gutter={16}>
-              {customTermsFields.map((field) => (
-                <Col xs={24} sm={12} md={8} key={field.key}>
-                  <DynamicFormField field={field} />
-                </Col>
-              ))}
-            </Row>
-          )}
 
           <div className="mt-2 flex gap-3">
             <Button type="primary" size="large" icon={<SaveOutlined />} loading={saving} onClick={handleSubmit}>
@@ -822,51 +818,6 @@ export default function GenerateReport() {
           </div>
         </Form>
       </Card>
-
-      <ReportAddFieldModal
-        open={headerFieldsOpen}
-        onClose={() => setHeaderFieldsOpen(false)}
-        title="Customize Report Fields"
-        fields={headerFields}
-        onAdd={(field) => {
-          setSchema(addSchemaField('reportHeaderFields', field));
-          message.success(`Field "${field.label}" added`);
-        }}
-        onRemove={(key) => {
-          setSchema(removeSchemaField('reportHeaderFields', key));
-          message.success('Field removed');
-        }}
-      />
-
-      <ReportAddFieldModal
-        open={customerFieldsOpen}
-        onClose={() => setCustomerFieldsOpen(false)}
-        title="Customize Customer Fields"
-        fields={reportCustomerFields}
-        onAdd={(field) => {
-          setSchema(addSchemaField('reportCustomerFields', field));
-          message.success(`Field "${field.label}" added`);
-        }}
-        onRemove={(key) => {
-          setSchema(removeSchemaField('reportCustomerFields', key));
-          message.success('Field removed');
-        }}
-      />
-
-      <ReportAddFieldModal
-        open={termsFieldsOpen}
-        onClose={() => setTermsFieldsOpen(false)}
-        title="Customize Terms & Conditions"
-        fields={termsFieldDefs}
-        onAdd={(field) => {
-          setSchema(addSchemaField('reportTermsFields', field));
-          message.success(`Field "${field.label}" added`);
-        }}
-        onRemove={(key) => {
-          setSchema(removeSchemaField('reportTermsFields', key));
-          message.success('Field removed');
-        }}
-      />
     </div>
   );
 }

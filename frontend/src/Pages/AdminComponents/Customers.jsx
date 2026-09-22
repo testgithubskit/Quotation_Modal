@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Form, Input, Modal, Popconfirm, Space, Table, Tooltip, Upload, message,
+  Button, Dropdown, Form, Input, Modal, Popconfirm, Space, Table, Tooltip, message,
 } from 'antd';
 import {
   PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
@@ -11,9 +11,10 @@ import { api, getApiErrorMessage } from '../../config/auth.js';
 import { useAuth } from '../../config/AuthContext.jsx';
 import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
+import BulkUploadModal from '../../Components/BulkUploadModal';
 import BulkReviewModal from '../../Components/BulkReviewModal';
 import { slugCode, slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
-import { datedFilename, downloadReportExcel, downloadReportPdf, parseSpreadsheetFile } from '../../utils/spreadsheet';
+import { datedFilename, downloadReportExcel, downloadReportPdf } from '../../utils/spreadsheet';
 import {
   digitsOnlyPhone,
   isPhoneLikeField,
@@ -21,13 +22,6 @@ import {
   phoneFieldRules,
   phoneInputProps,
 } from '../../utils/phoneValidation.js';
-
-function pick(row, ...keys) {
-  for (const key of keys) {
-    if (row[key] != null && String(row[key]).trim() !== '') return row[key];
-  }
-  return '';
-}
 
 function toExportRows(items, customFields) {
   return items.map((r) => {
@@ -45,23 +39,6 @@ function toExportRows(items, customFields) {
   });
 }
 
-function mapSheetToPreview(rawRows, customFields) {
-  return rawRows.map((row, index) => {
-    const mapped = {
-      _key: `cust-${index}`,
-      name: String(pick(row, 'name', 'Name', 'Customer Name')).trim(),
-      company: String(pick(row, 'company', 'Company', 'Company Name', 'notes')).trim(),
-      email: String(pick(row, 'email', 'Email')).trim(),
-      phone: String(pick(row, 'phone', 'Phone')).trim(),
-      address: String(pick(row, 'address', 'Address')).trim(),
-    };
-    customFields.forEach((f) => {
-      mapped[f.field_key] = pick(row, f.field_label, f.field_key);
-    });
-    return mapped;
-  }).filter((r) => r.name);
-}
-
 export default function Customers() {
   const { user } = useAuth();
   const orgName = user?.organization_name || 'Organization';
@@ -73,8 +50,11 @@ export default function Customers() {
   const [pageSize, setPageSize] = useState(10);
   const [createOpen, setCreateOpen] = useState(false);
   const [columnOpen, setColumnOpen] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [previewRows, setPreviewRows] = useState([]);
+  const [previewColumns, setPreviewColumns] = useState([]);
+  const [importing, setImporting] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [form] = Form.useForm();
@@ -240,68 +220,42 @@ export default function Customers() {
   };
 
   const onBulkUpload = async (file) => {
+    setImporting(true);
     try {
-      const parsed = await parseSpreadsheetFile(file);
-      const mapped = mapSheetToPreview(parsed, customFields);
-      if (!mapped.length) {
-        message.error('No valid customer rows found (need Customer Name)');
-        return false;
-      }
-      setPreviewRows(mapped);
+      const formData = new FormData();
+      formData.append('file', file);
+      const { data } = await api.post('/customers/import/preview', formData);
+      setPreviewColumns(data?.columns || []);
+      setPreviewRows(data?.rows || []);
+      setUploadOpen(false);
       setReviewOpen(true);
     } catch (error) {
-      message.error(getApiErrorMessage(error, 'Failed to read file'));
+      message.error(getApiErrorMessage(error, 'Failed to extract file'));
+    } finally {
+      setImporting(false);
     }
     return false;
   };
 
-  const bulkCreate = async (selected) => {
-    let created = 0;
+  const confirmBulkImport = async (selected) => {
     try {
-      for (const row of selected) {
-        const custom_data = {};
-        customFields.forEach((f) => {
-          const val = row[f.field_key];
-          if (val != null && val !== '') custom_data[f.field_key] = val;
-        });
-        const name = String(row.name || '').trim();
-        await api.post('/customers', {
-          customer_code: `${slugCode(name, 'CUST')}-${Date.now()}-${created}`.slice(0, 50),
-          name,
-          notes: row.company || null,
-          email: row.email || null,
-          phone: row.phone || null,
-          address: row.address || null,
-          is_active: true,
-          custom_data,
-        });
-        created += 1;
+      const { data } = await api.post('/customers/import/confirm', { rows: selected });
+      message.success(data?.message || 'Import completed');
+      if (data?.errors?.length) {
+        message.warning(`${data.errors.length} row(s) had errors`);
       }
-      message.success(`Created ${created} customer(s)`);
       setReviewOpen(false);
       setPreviewRows([]);
+      setPreviewColumns([]);
       setPage(1);
-      load();
+      await load();
     } catch (error) {
-      message.error(getApiErrorMessage(error, `Bulk create stopped after ${created}`));
+      message.error(getApiErrorMessage(error, 'Import failed'));
+      throw error;
     }
   };
 
   const exportRows = () => toExportRows(filtered, customFields);
-
-  const reviewColumns = useMemo(() => [
-    { key: 'name', title: 'Customer Name', required: true, width: 160 },
-    { key: 'company', title: 'Company Name', required: true, width: 160 },
-    { key: 'email', title: 'Email', width: 160 },
-    { key: 'phone', title: 'Phone', width: 120 },
-    { key: 'address', title: 'Address', width: 180 },
-    ...customFields.map((f) => ({
-      key: f.field_key,
-      title: f.field_label,
-      required: Boolean(f.is_required),
-      width: 140,
-    })),
-  ], [customFields]);
 
   const columns = [
     slNoColumn(page, pageSize),
@@ -309,6 +263,7 @@ export default function Customers() {
       title: 'Customer Name',
       dataIndex: 'name',
       fixed: 'left',
+      sorter: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
       render: (v, record) => (
         editingId === record.id
           ? <Input value={draft.name} onChange={(e) => setField('name', e.target.value)} />
@@ -318,6 +273,7 @@ export default function Customers() {
     {
       title: 'Company Name',
       dataIndex: 'notes',
+      sorter: (a, b) => String(a.notes || '').localeCompare(String(b.notes || '')),
       render: (v, record) => (
         editingId === record.id
           ? <Input value={draft.company} onChange={(e) => setField('company', e.target.value)} />
@@ -327,6 +283,7 @@ export default function Customers() {
     {
       title: 'Email',
       dataIndex: 'email',
+      sorter: (a, b) => String(a.email || '').localeCompare(String(b.email || '')),
       render: (v, record) => (
         editingId === record.id
           ? <Input value={draft.email} onChange={(e) => setField('email', e.target.value)} />
@@ -336,6 +293,7 @@ export default function Customers() {
     {
       title: 'Phone',
       dataIndex: 'phone',
+      sorter: (a, b) => String(a.phone || '').localeCompare(String(b.phone || '')),
       render: (v, record) => (
         editingId === record.id
           ? (
@@ -358,6 +316,8 @@ export default function Customers() {
           </span>
         ),
         key: f.field_key,
+        sorter: (a, b) => String(a.custom_data?.[f.field_key] ?? '')
+          .localeCompare(String(b.custom_data?.[f.field_key] ?? '')),
         render: (_, record) => (
           editingId === record.id
             ? (
@@ -416,9 +376,13 @@ export default function Customers() {
             <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
               Columns
             </Button>
-            <Upload accept=".xlsx,.xls,.csv" showUploadList={false} beforeUpload={onBulkUpload}>
-              <Button icon={<UploadOutlined />}>Bulk upload</Button>
-            </Upload>
+            <Button
+              icon={<UploadOutlined />}
+              loading={importing}
+              onClick={() => setUploadOpen(true)}
+            >
+              Bulk upload
+            </Button>
             <Dropdown
               menu={{
                 items: [
@@ -428,7 +392,7 @@ export default function Customers() {
                     label: 'Download as Excel',
                     onClick: () => downloadReportExcel(
                       exportRows(),
-                      datedFilename('customers', 'xls'),
+                      datedFilename('customers', 'xlsx'),
                       { organizationName: orgName, title: 'Customers Report' },
                     ),
                   },
@@ -465,6 +429,7 @@ export default function Customers() {
 
       <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
         <Table
+          className="app-data-table"
           rowKey="id"
           loading={loading}
           columns={columns}
@@ -493,6 +458,8 @@ export default function Customers() {
         onOk={create}
         okText="Save"
         destroyOnHidden
+        maskClosable={false}
+        keyboard={false}
       >
         <Form form={form} layout="vertical">
           <Form.Item name="name" label="Customer Name" rules={[{ required: true, message: 'Required' }]}>
@@ -530,26 +497,68 @@ export default function Customers() {
         </Form>
       </Modal>
 
-      <BulkReviewModal
-        open={reviewOpen}
-        onClose={() => {
-          setReviewOpen(false);
-          setPreviewRows([]);
-        }}
-        title="Review Extracted Customers"
-        columns={reviewColumns}
-        rows={previewRows}
-        entityLabel="customers"
-        confirmLabel="Bulk Create"
-        onConfirm={bulkCreate}
-      />
-
       <ManageColumnsModal
         open={columnOpen}
         onClose={() => setColumnOpen(false)}
         entityType="CUSTOMER"
         fields={customFields}
         onChanged={load}
+      />
+
+      <BulkUploadModal
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        title="Upload Customers from Excel"
+        loading={importing}
+        onFile={onBulkUpload}
+        hint={(
+          <>
+            Upload an
+            {' '}
+            <strong>.xlsx</strong>
+            ,
+            {' '}
+            <strong>.xls</strong>
+            ,
+            {' '}
+            <strong>.xlsm</strong>
+            , or
+            {' '}
+            <strong>.csv</strong>
+            {' '}
+            file. Only columns already defined in the app are extracted
+            (
+            <strong>Customer Name</strong>
+            ,
+            {' '}
+            <strong>Company Name</strong>
+            ,
+            {' '}
+            <strong>Email</strong>
+            ,
+            {' '}
+            <strong>Phone</strong>
+            ,
+            {' '}
+            <strong>Address</strong>
+            , plus any custom columns you added). Extra spreadsheet columns are ignored. You will review a preview before import.
+          </>
+        )}
+      />
+
+      <BulkReviewModal
+        open={reviewOpen}
+        onClose={() => {
+          setReviewOpen(false);
+          setPreviewRows([]);
+          setPreviewColumns([]);
+        }}
+        title="Review Extracted Customers"
+        columns={previewColumns}
+        rows={previewRows}
+        entityLabel="customers"
+        confirmLabel="Import selected"
+        onConfirm={confirmBulkImport}
       />
     </div>
   );

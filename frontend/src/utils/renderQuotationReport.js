@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import * as XLSX from 'xlsx';
 import { DEFAULT_PAGE_SETTINGS, pagePixelSize } from './reportPlaceholders.js';
 import { datedFilename } from './spreadsheet.js';
 
@@ -8,6 +9,13 @@ function esc(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+/** Keep blank Enter lines visible in print/PDF (empty <p> otherwise collapses). */
+export function preserveBlankParagraphs(html) {
+  return String(html || '')
+    .replace(/<p(\b[^>]*)?>\s*<\/p>/gi, '<p$1>&nbsp;</p>')
+    .replace(/<p(\b[^>]*)?>\s*<br\b[^>]*>\s*<\/p>/gi, '<p$1>&nbsp;</p>');
 }
 
 function fmtMoney(n) {
@@ -120,19 +128,18 @@ export function resolveLineItems(report) {
 }
 
 function buildItemsTableHtml(items = [], grandTotal) {
-  const border = '1px solid #cbd5e1';
-  const headBg = '#f1f5f9';
-  const footBg = '#f1f5f9';
+  const border = '1px solid #000';
+  const pad = '3px 6px';
   const rows = items.map((item) => {
     const qty = `${item.quantity} ${item.unit || ''}`.trim();
-    const nameStyle = item.isSub ? 'padding-left:16px;' : '';
+    const nameStyle = item.isSub ? 'padding-left:14px;' : '';
     return `<tr>
-      <td style="border:${border};padding:6px 8px;text-align:center;background:#fff">${item.slNo}</td>
-      <td style="border:${border};padding:6px 8px;background:#fff;${nameStyle}">${esc(item.activityName)}</td>
-      <td style="border:${border};padding:6px 8px;background:#fff">${esc(item.description)}</td>
-      <td style="border:${border};padding:6px 8px;text-align:center;background:#fff">${esc(qty)}</td>
-      <td style="border:${border};padding:6px 8px;text-align:right;background:#fff">${fmtMoney(item.unit_price)}</td>
-      <td style="border:${border};padding:6px 8px;text-align:right;background:#fff;font-weight:600">${fmtMoney(item.total)}</td>
+      <td style="border:${border};padding:${pad};text-align:center">${item.slNo}</td>
+      <td style="border:${border};padding:${pad};${nameStyle}">${esc(item.activityName)}</td>
+      <td style="border:${border};padding:${pad}">${esc(item.description)}</td>
+      <td style="border:${border};padding:${pad};text-align:center">${esc(qty)}</td>
+      <td style="border:${border};padding:${pad};text-align:right">${fmtMoney(item.unit_price)}</td>
+      <td style="border:${border};padding:${pad};text-align:right;font-weight:600">${fmtMoney(item.total)}</td>
     </tr>`;
   }).join('');
 
@@ -140,24 +147,24 @@ function buildItemsTableHtml(items = [], grandTotal) {
   const sum = items.reduce((acc, i) => acc + Number(i.total || 0), 0);
   const totalVal = grandTotal != null && grandTotal !== '' ? Number(grandTotal) : sum;
 
-  return `<table style="width:100%;border-collapse:collapse;font-size:inherit">
+  return `<table style="width:100%;border-collapse:collapse;border-spacing:0;font-size:inherit;margin:0">
     <thead>
       <tr>
-        <th style="border:${border};padding:7px 8px;text-align:center;width:48px;background:${headBg};color:#0f172a;font-weight:600">Sl No</th>
-        <th style="border:${border};padding:7px 8px;text-align:left;background:${headBg};color:#0f172a;font-weight:600">Activity Name</th>
-        <th style="border:${border};padding:7px 8px;text-align:left;background:${headBg};color:#0f172a;font-weight:600">Description</th>
-        <th style="border:${border};padding:7px 8px;background:${headBg};color:#0f172a;font-weight:600">Qty</th>
-        <th style="border:${border};padding:7px 8px;text-align:right;background:${headBg};color:#0f172a;font-weight:600">Rate</th>
-        <th style="border:${border};padding:7px 8px;text-align:right;background:${headBg};color:#0f172a;font-weight:600">Total</th>
+        <th style="border:${border};padding:${pad};text-align:center;width:48px;font-weight:600">Sl No</th>
+        <th style="border:${border};padding:${pad};text-align:left;font-weight:600">Activity Name</th>
+        <th style="border:${border};padding:${pad};text-align:left;font-weight:600">Description</th>
+        <th style="border:${border};padding:${pad};font-weight:600">Qty</th>
+        <th style="border:${border};padding:${pad};text-align:right;font-weight:600">Rate</th>
+        <th style="border:${border};padding:${pad};text-align:right;font-weight:600">Total</th>
       </tr>
     </thead>
     <tbody>
-      ${rows || `<tr><td colspan="6" style="border:${border};padding:8px;background:#fff">No items</td></tr>`}
+      ${rows || `<tr><td colspan="6" style="border:${border};padding:${pad}">No items</td></tr>`}
       <tr>
-        <td colspan="3" style="border:${border};padding:8px;background:${footBg};color:#0f172a;font-weight:700">Total</td>
-        <td style="border:${border};padding:8px;background:${footBg};color:#0f172a;font-weight:700;text-align:center">${sumQty}</td>
-        <td style="border:${border};padding:8px;background:${footBg}"></td>
-        <td style="border:${border};padding:8px;background:${footBg};color:#0f172a;font-weight:700;text-align:right">${fmtMoney(totalVal)}</td>
+        <td colspan="3" style="border:${border};padding:${pad};font-weight:700">Total</td>
+        <td style="border:${border};padding:${pad};font-weight:700;text-align:center">${sumQty}</td>
+        <td style="border:${border};padding:${pad}"></td>
+        <td style="border:${border};padding:${pad};font-weight:700;text-align:right">${fmtMoney(totalVal)}</td>
       </tr>
     </tbody>
   </table>`;
@@ -197,9 +204,9 @@ export function buildPlaceholderMap({ report, customer, organization } = {}) {
     date: report?.quotation_date
       ? dayjs(report.quotation_date).format('DD/MM/YYYY')
       : (header.date || ''),
-    customer_name: customer?.name || '',
+    customer_name: customer?.name || cd.contactPerson || '',
     company_name: cd.companyName || customer?.notes || '',
-    contact_person: cd.contactPerson || '',
+    contact_person: customer?.name || cd.contactPerson || '',
     mobile: cd.mobileNumber || customer?.phone || '',
     email: cd.emailId || customer?.email || '',
     subject: cd.subject || '',
@@ -225,6 +232,11 @@ export function buildPlaceholderMap({ report, customer, organization } = {}) {
   }
   if (cd.termsFields && typeof cd.termsFields === 'object') {
     Object.entries(cd.termsFields).forEach(([k, v]) => {
+      if (v != null) map[k] = v;
+    });
+  }
+  if (cd.placeholderFields && typeof cd.placeholderFields === 'object') {
+    Object.entries(cd.placeholderFields).forEach(([k, v]) => {
       if (v != null) map[k] = v;
     });
   }
@@ -270,21 +282,57 @@ export function buildFilledDocumentHtml({ report, customer, template, organizati
   if (!hasContent) return null;
 
   const m = pageSettings.margins || {};
+  const top = m.top ?? 5;
+  const right = m.right ?? 5;
+  const bottom = m.bottom ?? 5;
+  const left = m.left ?? 5;
+  const pagePxLocal = pagePixelSize(pageSettings);
+  const contentH = Math.max(40, pagePxLocal.hMm - Number(top) - Number(bottom));
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(report?.quotation_number || 'Report')}</title>
 <style>
-  @page { size: ${pageSettings.pageSize} ${pageSettings.orientation}; margin: ${m.top || 5}mm ${m.right || 5}mm ${m.bottom || 5}mm ${m.left || 5}mm; }
-  body { margin: 0; font-family: ${pageSettings.fontFamily || 'Times New Roman'}, Arial, sans-serif; font-size: ${pageSettings.fontSize || '12px'}; color: #0f172a; }
-  table { border-collapse: collapse; width: 100%; }
-  td, th { border: 1px solid #000; padding: 4px 6px; vertical-align: top; background: #fff; }
-  th { background: #fff; font-weight: 600; }
-  img { max-width: 100%; height: auto; }
+  @page { size: ${pageSettings.pageSize} ${pageSettings.orientation}; margin: ${top}mm ${right}mm ${bottom}mm ${left}mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: ${pageSettings.fontFamily || 'Times New Roman'}, Arial, sans-serif;
+    font-size: ${pageSettings.fontSize || '12px'};
+    color: #000;
+    line-height: 1.35;
+  }
+  .doc-page {
+    min-height: ${contentH}mm;
+    display: flex;
+    flex-direction: column;
+  }
+  .doc-header { flex-shrink: 0; }
+  .doc-body {
+    flex: 1 1 auto;
+    margin: ${pageSettings.headerSpacing || 0}mm 0 ${pageSettings.footerSpacing || 0}mm;
+  }
+  .doc-footer { flex-shrink: 0; margin-top: auto; }
+  table { border-collapse: collapse; border-spacing: 0; width: 100%; margin: 0; }
+  td, th { border: 1px solid #000; padding: 3px 6px; vertical-align: top; background: #fff; }
+  th { font-weight: 600; }
+  td[style*="border-top: none"], th[style*="border-top: none"] { border-top: none !important; }
+  td[style*="border-right: none"], th[style*="border-right: none"] { border-right: none !important; }
+  td[style*="border-bottom: none"], th[style*="border-bottom: none"] { border-bottom: none !important; }
+  td[style*="border-left: none"], th[style*="border-left: none"] { border-left: none !important; }
+  p {
+    margin: 0;
+    line-height: 1.35;
+    min-height: 1.35em;
+  }
+  p:empty::before { content: '\\00a0'; }
+  img { max-width: 100%; height: auto; display: block; }
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   }
 </style></head><body>
-  <div>${headerHtml}</div>
-  <div style="margin:${pageSettings.headerSpacing || 0}mm 0">${bodyHtml}</div>
-  <div>${footerHtml}</div>
+  <div class="doc-page">
+    <div class="doc-header">${preserveBlankParagraphs(headerHtml)}</div>
+    <div class="doc-body">${preserveBlankParagraphs(bodyHtml)}</div>
+    <div class="doc-footer">${preserveBlankParagraphs(footerHtml)}</div>
+  </div>
 </body></html>`;
 }
 
@@ -302,48 +350,48 @@ export function quotationExcelRows(report) {
   }));
 }
 
-function escapeExcelHtml(s) {
-  return String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 export function downloadQuotationExcel(report, {
   customer,
   organizationName = 'Organization',
   filename,
 } = {}) {
-  const name = filename || datedFilename(
+  let name = filename || datedFilename(
     `quotation-${report?.quotation_number || 'report'}`,
-    'xls',
+    'xlsx',
   );
+  if (name.toLowerCase().endsWith('.xls') && !name.toLowerCase().endsWith('.xlsx')) {
+    name = `${name.slice(0, -4)}.xlsx`;
+  } else if (!name.toLowerCase().endsWith('.xlsx')) {
+    name = `${name}.xlsx`;
+  }
+
   const cd = report?.custom_data || {};
   const lines = resolveLineItems(report);
   const columns = [
     'Sl No', 'Activity Name', 'Description', 'Specification',
     'Qty', 'Unit', 'Unit Rate (₹)', 'Total Cost (₹)',
   ];
-  const colCount = columns.length;
-  const border = 'border:1px solid #94a3b8;';
-  const cell = `${border}padding:6px 8px;font-family:Arial,sans-serif;font-size:11px;color:#0f172a;`;
-  const headCell = `${border}padding:7px 8px;font-family:Arial,sans-serif;font-size:11px;font-weight:bold;color:#ffffff;background:#64748b;text-transform:uppercase;`;
-  const labelCell = `${border}padding:6px 8px;font-family:Arial,sans-serif;font-size:11px;font-weight:bold;color:#0f172a;background:#f1f5f9;width:160px;`;
-  const metaRow = (label, value) => (
-    `<tr><td style="${labelCell}">${escapeExcelHtml(label)}</td>`
-    + `<td colspan="${colCount - 1}" style="${cell}">${escapeExcelHtml(value ?? '—')}</td></tr>`
-  );
-
   const notes = Array.isArray(cd.activityNotes)
     ? cd.activityNotes.filter(Boolean).join('\n')
     : (cd.activityNotes || '');
   const terms = cd.termsAndConditions || report?.notes || '';
 
-  const headerRow = columns.map((c) => `<th style="${headCell}">${escapeExcelHtml(c)}</th>`).join('');
-  const dataRows = lines.map((row, idx) => {
-    const bg = idx % 2 === 1 ? 'background:#f8fafc;' : 'background:#ffffff;';
-    const vals = [
+  const aoa = [
+    [organizationName],
+    [`Quotation ${report?.quotation_number || ''}`.trim()],
+    [],
+    ['Customer Details'],
+    ['Customer', customer?.name || '—'],
+    ['Contact Person', cd.contactPerson || customer?.name || '—'],
+    ['Company', cd.companyName || customer?.notes || '—'],
+    ['Mobile', cd.mobileNumber || customer?.phone || '—'],
+    ['Email', cd.emailId || customer?.email || '—'],
+    ['Subject', cd.subject || '—'],
+    ['Report No', report?.quotation_number || '—'],
+    ['Date', report?.quotation_date ? dayjs(report.quotation_date).format('DD/MM/YYYY') : '—'],
+    [],
+    columns,
+    ...lines.map((row) => [
       row.slNo,
       row.activityName,
       row.description,
@@ -352,71 +400,42 @@ export function downloadQuotationExcel(report, {
       row.unit,
       row.unit_price,
       row.total,
-    ];
-    return `<tr>${vals.map((v) => `<td style="${cell}${bg}">${escapeExcelHtml(v)}</td>`).join('')}</tr>`;
-  }).join('');
+    ]),
+    ['', '', '', '', '', '', 'Total', Number(report?.total || 0)],
+    [],
+    ['Notes'],
+    [notes || '—'],
+    [],
+    ['Terms & Conditions'],
+    [terms || '—'],
+  ];
 
-  const totalRow = (
-    `<tr>`
-    + `<td colspan="${colCount - 1}" style="${cell}text-align:right;font-weight:bold;background:#f1f5f9;">Total</td>`
-    + `<td style="${cell}font-weight:bold;background:#f1f5f9;">${escapeExcelHtml(fmtMoney(report?.total))}</td>`
-    + `</tr>`
-  );
+  const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: columns.length - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: columns.length - 1 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: columns.length - 1 } },
+  ];
+  worksheet['!cols'] = columns.map(() => ({ wch: 16 }));
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Quotation');
+  XLSX.writeFile(workbook, name);
+}
 
-  const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>Quotation</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-<body>
-<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%">
-  <tr><td colspan="${colCount}" style="text-align:center;font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#0f172a;padding:8px 4px">${escapeExcelHtml(organizationName)}</td></tr>
-  <tr><td colspan="${colCount}" style="text-align:center;font-family:Arial,sans-serif;font-size:13px;font-weight:600;color:#475569;padding:2px 4px 10px">${escapeExcelHtml(`Quotation ${report?.quotation_number || ''}`.trim())}</td></tr>
-  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:#0f172a;padding:10px 4px 4px;background:#e2e8f0;">Customer Details</td></tr>
-  ${metaRow('Customer', customer?.name)}
-  ${metaRow('Contact Person', cd.contactPerson || customer?.name)}
-  ${metaRow('Company', cd.companyName || customer?.notes)}
-  ${metaRow('Mobile', cd.mobileNumber || customer?.phone)}
-  ${metaRow('Email', cd.emailId || customer?.email)}
-  ${metaRow('Subject', cd.subject)}
-  ${metaRow('Report No', report?.quotation_number)}
-  ${metaRow('Date', report?.quotation_date ? dayjs(report.quotation_date).format('DD/MM/YYYY') : '')}
-  <tr><td colspan="${colCount}" style="padding:8px 0 0"></td></tr>
-  <tr>${headerRow}</tr>
-  ${dataRows || `<tr><td colspan="${colCount}" style="${cell}">No items</td></tr>`}
-  ${totalRow}
-  <tr><td colspan="${colCount}" style="padding:12px 0 0"></td></tr>
-  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:#0f172a;padding:8px 4px 4px;background:#e2e8f0;">Notes</td></tr>
-  <tr><td colspan="${colCount}" style="${cell}white-space:pre-wrap;">${escapeExcelHtml(notes || '—')}</td></tr>
-  <tr><td colspan="${colCount}" style="padding:12px 0 0"></td></tr>
-  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:12px;font-weight:700;color:#0f172a;padding:8px 4px 4px;background:#e2e8f0;">Terms &amp; Conditions</td></tr>
-  <tr><td colspan="${colCount}" style="${cell}white-space:pre-wrap;">${escapeExcelHtml(terms || '—')}</td></tr>
-</table>
-</body></html>`;
-
-  const safeName = name.toLowerCase().endsWith('.xlsx')
-    ? `${name.slice(0, -5)}.xls`
-    : (name.toLowerCase().endsWith('.xls') ? name : `${name}.xls`);
-  const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+function triggerBlobDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = safeName;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 }
 
-function pageFormatForJsPdf(pageSettings = {}) {
-  const size = String(pageSettings.pageSize || 'A4').toUpperCase();
-  const orientation = pageSettings.orientation === 'landscape' ? 'landscape' : 'portrait';
-  const format = ['A3', 'A4', 'A5', 'LETTER', 'LEGAL'].includes(size) ? size : 'A4';
-  return { orientation, format: format.toLowerCase() === 'letter' ? 'letter' : format };
-}
-
 /**
- * Download filled quotation as PDF in-place (no new tab).
+ * Download filled quotation as PDF via backend Playwright (Chromium).
+ * Falls back to browser print if the PDF service is unavailable.
  */
 export async function downloadQuotationPdfViaChromium({
   report,
@@ -424,15 +443,27 @@ export async function downloadQuotationPdfViaChromium({
   template,
   organization,
 } = {}) {
+  const td = template?.template_data || {};
+  const pageSettings = {
+    ...DEFAULT_PAGE_SETTINGS,
+    ...td,
+    margins: td.margins || DEFAULT_PAGE_SETTINGS.margins,
+  };
+
   let html = buildFilledDocumentHtml({ report, customer, template, organization });
   if (!html) {
     const lines = resolveLineItems(report);
-    const table = buildItemsTableHtml(lines);
+    const table = buildItemsTableHtml(lines, report?.total);
     html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(report?.quotation_number || 'Report')}</title>
 <style>
-  body { font-family: Times New Roman, Arial, sans-serif; font-size: 12px; color: #0f172a; padding: 24px; }
-  table { border-collapse: collapse; width: 100%; }
-  td, th { border: 1px solid #000; padding: 4px 6px; }
+  @page { size: ${pageSettings.pageSize} ${pageSettings.orientation}; margin: 5mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: Times New Roman, Arial, sans-serif; font-size: 12px; color: #000; line-height: 1.35; }
+  table { border-collapse: collapse; border-spacing: 0; width: 100%; }
+  td, th { border: 1px solid #000; padding: 3px 6px; vertical-align: top; }
+  h2 { margin: 0 0 8px; font-size: 14px; }
+  p { margin: 0.25em 0; }
 </style></head><body>
   <h2>${esc(report?.quotation_number || 'Report')}</h2>
   <p><strong>Customer:</strong> ${esc(customer?.name || '—')}</p>
@@ -441,65 +472,57 @@ export async function downloadQuotationPdfViaChromium({
 </body></html>`;
   }
 
-  const iframe = document.createElement('iframe');
-  iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;';
-  document.body.appendChild(iframe);
+  const filename = datedFilename(
+    `quotation-${report?.quotation_number || 'report'}`,
+    'pdf',
+  );
 
   try {
-    const idoc = iframe.contentDocument;
-    idoc.open();
-    idoc.write(html);
-    idoc.close();
-
-    await new Promise((resolve) => {
-      const done = () => resolve();
-      if (idoc.readyState === 'complete') setTimeout(done, 350);
-      else iframe.onload = () => setTimeout(done, 350);
-    });
-
-    const { default: html2canvas } = await import('html2canvas');
-    const { jsPDF } = await import('jspdf');
-    const td = template?.template_data || {};
-    const pageSettings = {
-      ...DEFAULT_PAGE_SETTINGS,
-      ...td,
-      margins: td.margins || DEFAULT_PAGE_SETTINGS.margins,
-    };
-    const { orientation, format } = pageFormatForJsPdf(pageSettings);
-    const canvas = await html2canvas(idoc.body, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-      windowWidth: idoc.documentElement.scrollWidth,
-      windowHeight: idoc.documentElement.scrollHeight,
-    });
-
-    const pdf = new jsPDF({ orientation, unit: 'pt', format });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
-    const imgW = pageW;
-    const imgH = (canvas.height * imgW) / canvas.width;
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
-
-    let heightLeft = imgH;
-    let position = 0;
-    pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-    heightLeft -= pageH;
-    while (heightLeft > 0) {
-      position -= pageH;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, imgW, imgH);
-      heightLeft -= pageH;
+    const { api } = await import('../config/auth.js');
+    const { data } = await api.post(
+      '/pdf/render',
+      {
+        html,
+        page_size: pageSettings.pageSize || 'A4',
+        orientation: pageSettings.orientation || 'portrait',
+        margins: pageSettings.margins || DEFAULT_PAGE_SETTINGS.margins,
+        filename,
+      },
+      { responseType: 'blob' },
+    );
+    const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' });
+    if (blob.type && blob.type.includes('json')) {
+      const text = await blob.text();
+      throw new Error(text || 'PDF render failed');
+    }
+    triggerBlobDownload(blob, filename);
+    return;
+  } catch (error) {
+    const detail = error?.response?.data;
+    let message = error?.message || 'PDF render failed';
+    if (detail instanceof Blob) {
+      try {
+        const parsed = JSON.parse(await detail.text());
+        message = parsed?.error?.detail || parsed?.detail || message;
+      } catch {
+        /* keep message */
+      }
+    } else if (typeof detail === 'object' && detail) {
+      message = detail?.error?.detail || detail?.detail || message;
     }
 
-    const filename = datedFilename(
-      `quotation-${report?.quotation_number || 'report'}`,
-      'pdf',
-    );
-    pdf.save(filename);
-  } finally {
-    iframe.remove();
+    // Fallback: Chromium print dialog (same layout as Playwright)
+    const w = window.open('', '_blank');
+    if (!w) {
+      throw new Error(message || 'Allow pop-ups to download PDF');
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.document.title = report?.quotation_number || 'Report';
+    setTimeout(() => {
+      w.focus();
+      w.print();
+    }, 400);
   }
 }

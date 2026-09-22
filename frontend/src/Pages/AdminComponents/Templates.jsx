@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Empty, Input, Pagination, Popconfirm, Select, Space, Spin, Tabs, Tooltip, Typography, message,
+  Button, Empty, Input, Pagination, Popconfirm, Select, Space, Spin, Tooltip, Typography, message,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, FormOutlined, FileDoneOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined,
   SearchOutlined, AppstoreOutlined, UnorderedListOutlined, ReloadOutlined,
   StarFilled, StarOutlined, FileTextOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
-import GeneratedReportsTable from '../../Components/GeneratedReportsTable';
 import ReportTemplateEditor from '../../Components/ReportTemplateEditor';
 
 const PAGE_SIZE = 8;
@@ -19,54 +18,86 @@ function timeAgo(iso) {
   const d = dayjs(iso);
   if (!d.isValid()) return '';
   const mins = dayjs().diff(d, 'minute');
-  if (mins < 60) return `${Math.max(1, mins)}m ago`;
+  if (mins < 60) return `Updated ${Math.max(1, mins)}m ago`;
   const hours = dayjs().diff(d, 'hour');
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return `Updated ${hours}h ago`;
   const days = dayjs().diff(d, 'day');
-  if (days < 14) return `${days}d ago`;
+  if (days < 14) return `Updated ${days}d ago`;
   const weeks = Math.floor(days / 7);
-  if (weeks < 9) return `${weeks}w ago`;
-  return `${Math.max(1, Math.floor(days / 30))}mo ago`;
+  if (weeks < 9) return `Updated ${weeks}w ago`;
+  return `Updated ${Math.max(1, Math.floor(days / 30))}mo ago`;
 }
 
 function TemplatePreviewThumb({ template }) {
   const td = template.template_data || {};
   const page = td.pageSize || 'A4';
   const orient = td.orientation || 'portrait';
+  const margins = td.margins || { top: 5, right: 5, bottom: 5, left: 5 };
   const header = td.headerHtml || '';
   const body = td.bodyHtml || '';
+  const footer = td.footerHtml || '';
+  const hasContent = Boolean(header || body || footer);
+  const landscape = orient === 'landscape';
+  // Full page at CSS px (~96dpi), then scale to fit card like reference designer cards
+  const pageW = landscape ? 900 : 640;
+  const pageH = landscape ? 640 : 900;
+  const scale = landscape ? 0.42 : 0.34;
 
   return (
-    <div className="relative flex aspect-[16/10] items-center justify-center overflow-hidden bg-slate-100 p-3">
-      <div
-        className="h-[88%] overflow-hidden bg-white shadow-sm ring-1 ring-slate-200"
-        style={{
-          width: orient === 'landscape' ? '88%' : '58%',
-          aspectRatio: orient === 'landscape' ? '1.35 / 1' : '1 / 1.3',
-        }}
-      >
+    <div className="template-card-thumb relative aspect-[16/10] overflow-hidden">
+      <div className="absolute inset-0 flex items-start justify-center pt-3">
         <div
-          className="origin-top-left scale-[0.22] p-2 text-[10px] leading-tight text-slate-800"
-          style={{ width: '455%', height: '455%' }}
-          dangerouslySetInnerHTML={{
-            __html: header || body
-              ? `${header}${body}`
-              : `<div style="border:1px solid #cbd5e1;padding:8px;font-weight:600;color:#0f766e">${template.name || 'Template'}</div>
-                 <div style="margin-top:8px;border:1px solid #99f6e4;background:#f0fdfa;padding:6px;color:#0f766e">${page} · ${orient}</div>
-                 <div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
-                   <div style="border:1px solid #e2e8f0;height:18px"></div>
-                   <div style="border:1px solid #e2e8f0;height:18px"></div>
-                   <div style="border:1px solid #e2e8f0;height:18px"></div>
-                   <div style="border:1px solid #e2e8f0;height:18px"></div>
-                 </div>`,
+          className="overflow-hidden bg-white shadow-sm"
+          style={{
+            width: pageW * scale,
+            height: pageH * scale,
           }}
-        />
+        >
+          <div
+            className="template-card-preview"
+            style={{
+              width: pageW,
+              minHeight: pageH,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+              padding: `${margins.top || 5}mm ${margins.right || 5}mm ${margins.bottom || 5}mm ${margins.left || 5}mm`,
+              boxSizing: 'border-box',
+              fontFamily: `${td.fontFamily || 'Times New Roman'}, Times, serif`,
+              fontSize: td.fontSize || '12px',
+              background: '#fff',
+            }}
+          >
+            {hasContent ? (
+              <>
+                {header ? <div dangerouslySetInnerHTML={{ __html: header }} /> : null}
+                {body ? (
+                  <div
+                    style={{
+                      marginTop: `${td.headerSpacing || 0}mm`,
+                      marginBottom: `${td.footerSpacing || 0}mm`,
+                    }}
+                    dangerouslySetInnerHTML={{ __html: body }}
+                  />
+                ) : null}
+                {footer ? <div dangerouslySetInnerHTML={{ __html: footer }} /> : null}
+              </>
+            ) : (
+              <div style={{ color: '#64748b', fontSize: 13 }}>
+                <div style={{ fontWeight: 600, color: '#0f766e', marginBottom: 8 }}>
+                  {template.name || 'Template'}
+                </div>
+                <div>{page} · {orient}</div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
 function TemplateCard({ t, starringId, onDesign, onStar, onRemove }) {
+  const updatedAt = t.updated_at || t.created_at;
   return (
     <div className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-teal-400 hover:shadow-md">
       <div className="relative cursor-pointer" onClick={() => onDesign(t.id)}>
@@ -74,7 +105,7 @@ function TemplateCard({ t, starringId, onDesign, onStar, onRemove }) {
         <Tooltip title={t.is_default ? 'Starred — used when generating reports' : 'Star to use for all reports'}>
           <button
             type="button"
-            className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-lg shadow-sm ring-1 ring-slate-200 transition hover:bg-white"
+            className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-lg shadow-sm ring-1 ring-slate-200 transition hover:bg-white"
             onClick={(e) => {
               e.stopPropagation();
               onStar(t);
@@ -87,11 +118,13 @@ function TemplateCard({ t, starringId, onDesign, onStar, onRemove }) {
           </button>
         </Tooltip>
       </div>
-      <div className="flex items-center gap-2 border-t border-slate-100 px-3 py-2.5">
+      <div className="flex items-center gap-2 border-t border-slate-100 bg-white px-3 py-2.5">
         <FileTextOutlined className="text-teal-600" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-slate-800">{t.name}</div>
-          <div className="text-[11px] text-slate-500">{timeAgo(t.updated_at || t.created_at)}</div>
+          <Tooltip title={updatedAt ? dayjs(updatedAt).format('DD MMM YYYY, hh:mm A') : ''}>
+            <div className="text-[11px] text-slate-500">{timeAgo(updatedAt)}</div>
+          </Tooltip>
         </div>
         <Space size={0}>
           <Tooltip title="Edit">
@@ -209,7 +242,7 @@ function TemplateList({ onDesign, onCreate }) {
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
           <Typography.Title level={4} className="!mb-1 !font-sans !text-teal-800">
-            Report Designer
+            Design template
           </Typography.Title>
           <p className="m-0 text-sm text-slate-500">
             Create and manage report templates. Star one template — users generate reports with that template only.
@@ -351,7 +384,6 @@ function TemplateList({ onDesign, onCreate }) {
 }
 
 export default function Templates() {
-  const [tab, setTab] = useState('design');
   const [editorId, setEditorId] = useState(null);
   const [designing, setDesigning] = useState(false);
   const [listKey, setListKey] = useState(0);
@@ -374,44 +406,16 @@ export default function Templates() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <Tabs
-        activeKey={tab}
-        onChange={setTab}
-        className="report-design-tabs min-h-0 flex-1 [&_.ant-tabs-content]:h-full [&_.ant-tabs-tabpane]:h-full"
-        items={[
-          {
-            key: 'design',
-            label: (
-              <span className="inline-flex items-center gap-2">
-                <FormOutlined />
-                Template Design
-              </span>
-            ),
-            children: (
-              <TemplateList
-                key={listKey}
-                onCreate={() => {
-                  setEditorId(null);
-                  setDesigning(true);
-                }}
-                onDesign={(id) => {
-                  setEditorId(id);
-                  setDesigning(true);
-                }}
-              />
-            ),
-          },
-          {
-            key: 'reports',
-            label: (
-              <span className="inline-flex items-center gap-2">
-                <FileDoneOutlined />
-                Generated Reports
-              </span>
-            ),
-            children: <GeneratedReportsTable active={tab === 'reports'} />,
-          },
-        ]}
+      <TemplateList
+        key={listKey}
+        onCreate={() => {
+          setEditorId(null);
+          setDesigning(true);
+        }}
+        onDesign={(id) => {
+          setEditorId(id);
+          setDesigning(true);
+        }}
       />
     </div>
   );

@@ -128,6 +128,8 @@ export default function BulkReviewModal({
       destroyOnHidden
       footer={null}
       closable={false}
+      maskClosable={false}
+      keyboard={false}
       styles={{ body: { paddingTop: 12 } }}
     >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">

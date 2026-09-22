@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Form, Input, Modal, Popconfirm, Select, Switch, Table, Typography, message,
+  Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Typography, message,
 } from 'antd';
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../config/auth.js';
 import {
   hideActivityBuiltinColumn,
@@ -10,14 +10,17 @@ import {
 } from '../utils/activityColumns.js';
 
 const EMPTY_LIST = [];
+const OTHER_TYPE = '__OTHER__';
 
 const FIELD_TYPES = [
   { value: 'TEXT', label: 'Text' },
   { value: 'TEXTAREA', label: 'Long text' },
   { value: 'NUMBER', label: 'Number' },
+  { value: 'DECIMAL', label: 'Decimal' },
   { value: 'DATE', label: 'Date' },
   { value: 'EMAIL', label: 'Email' },
   { value: 'URL', label: 'URL' },
+  { value: OTHER_TYPE, label: 'Other' },
 ];
 
 function toKey(label) {
@@ -34,6 +37,12 @@ function rowKey(field, index) {
   return String(field?.id ?? field?.field_key ?? `col-${index}`);
 }
 
+function displayType(field) {
+  const custom = field?.options?.custom_type;
+  if (custom) return String(custom);
+  return field?.field_type || 'TEXT';
+}
+
 export default function ManageColumnsModal({
   open,
   onClose,
@@ -46,6 +55,8 @@ export default function ManageColumnsModal({
   const [savingId, setSavingId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [draftLabels, setDraftLabels] = useState({});
+  const [editingKey, setEditingKey] = useState(null);
+  const [typeChoice, setTypeChoice] = useState('TEXT');
   const wasOpen = useRef(false);
 
   const fieldList = Array.isArray(fields) ? fields : EMPTY_LIST;
@@ -56,7 +67,6 @@ export default function ManageColumnsModal({
     [builtinList, fieldList],
   );
 
-  // Sync rename drafts when column list changes (not on every keystroke in Add form)
   useEffect(() => {
     if (!open) return;
     const next = {};
@@ -64,14 +74,16 @@ export default function ManageColumnsModal({
       next[rowKey(f, i)] = f.field_label ?? '';
     });
     setDraftLabels(next);
+    setEditingKey(null);
   }, [open, allRows]);
 
-  // Reset Add form only when modal opens (not when typing / selecting type)
   useEffect(() => {
     if (open && !wasOpen.current) {
       addForm.resetFields();
-      addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
+      addForm.setFieldsValue({ field_type: 'TEXT', is_required: false, custom_type: undefined });
+      setTypeChoice('TEXT');
     }
+    if (!open) setEditingKey(null);
     wasOpen.current = open;
   }, [open, addForm]);
 
@@ -82,7 +94,10 @@ export default function ManageColumnsModal({
       message.error('Column name cannot be empty');
       return;
     }
-    if (label === field.field_label) return;
+    if (label === field.field_label) {
+      setEditingKey(null);
+      return;
+    }
     setSavingId(key);
     try {
       if (field.is_builtin) {
@@ -94,6 +109,7 @@ export default function ManageColumnsModal({
         message.success('Column renamed');
         onChanged?.();
       }
+      setEditingKey(null);
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Rename failed'));
     } finally {
@@ -140,22 +156,34 @@ export default function ManageColumnsModal({
   const addColumn = async () => {
     try {
       const values = await addForm.validateFields();
-      const field_key = toKey(values.field_label);
+      const field_label = values.field_label.trim();
+      const field_key = toKey(field_label);
       if (!field_key) {
         message.error('Enter a valid name');
         return;
       }
 
+      const isOther = values.field_type === OTHER_TYPE;
+      const customType = String(values.custom_type || '').trim();
+      if (isOther && !customType) {
+        message.error('Enter a custom type');
+        return;
+      }
+
+      const field_type = isOther ? 'TEXT' : (values.field_type || 'TEXT');
+      const options = isOther ? { custom_type: customType } : null;
+
       const builtinKeys = ['name', 'description', 'unit', 'unit_price'];
       if (builtinKeys.includes(field_key) && entityType === 'ACTIVITY') {
         updateActivityBuiltinColumn(field_key, {
           is_hidden: false,
-          field_label: values.field_label.trim(),
+          field_label,
           is_required: Boolean(values.is_required),
         });
         message.success('Column restored');
         addForm.resetFields();
         addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
+        setTypeChoice('TEXT');
         onChanged?.();
         return;
       }
@@ -163,13 +191,13 @@ export default function ManageColumnsModal({
       const hiddenBuiltin = builtinList.find(
         (b) => b?.is_hidden && (
           b.field_key === field_key
-          || String(b.field_label || '').toLowerCase() === values.field_label.trim().toLowerCase()
+          || String(b.field_label || '').toLowerCase() === field_label.toLowerCase()
         ),
       );
       if (hiddenBuiltin) {
         updateActivityBuiltinColumn(hiddenBuiltin.field_key, {
           is_hidden: false,
-          field_label: values.field_label.trim(),
+          field_label,
           is_required: Boolean(values.is_required),
         });
         message.success('Column restored');
@@ -181,16 +209,18 @@ export default function ManageColumnsModal({
       await api.post('/custom-fields', {
         entity_type: entityType,
         field_key,
-        field_label: values.field_label.trim(),
-        field_type: values.field_type || 'TEXT',
+        field_label,
+        field_type,
         is_required: Boolean(values.is_required),
         is_visible: true,
         is_editable: true,
         display_order: fieldList.length,
+        options,
       });
       message.success('Column added');
       addForm.resetFields();
       addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
+      setTypeChoice('TEXT');
       onChanged?.();
     } catch (error) {
       if (error?.errorFields) return;
@@ -208,28 +238,36 @@ export default function ManageColumnsModal({
       footer={<Button onClick={onClose}>Close</Button>}
       width={720}
       destroyOnHidden={false}
+      maskClosable={false}
+      keyboard={false}
     >
       <Typography.Text type="secondary" className="mb-3 block">
-        Rename existing columns below. Mark mandatory or delete. Add a new column and it appears in this list to rename.
+        Rename existing columns with Edit. Mark mandatory or delete. Add a new column below.
       </Typography.Text>
 
       <Table
+        className="app-data-table manage-columns-table"
         size="small"
         rowKey={(record, index) => rowKey(record, index)}
         pagination={false}
         locale={{ emptyText: 'No columns yet — add one below' }}
         dataSource={allRows}
+        scroll={{ y: 5 * 48 }}
         columns={[
           {
             title: 'Column name',
             key: 'label',
             render: (_, field, index) => {
               const key = rowKey(field, index);
+              const editing = editingKey === key;
+              if (!editing) {
+                return <span className="font-medium text-slate-800">{field.field_label || '—'}</span>;
+              }
               return (
                 <Input
+                  autoFocus
                   value={draftLabels[key] ?? field.field_label ?? ''}
                   onChange={(e) => setDraftLabels((s) => ({ ...s, [key]: e.target.value }))}
-                  onBlur={() => rename(field, index)}
                   onPressEnter={() => rename(field, index)}
                   disabled={savingId === key}
                   placeholder="Rename column"
@@ -239,9 +277,13 @@ export default function ManageColumnsModal({
           },
           {
             title: 'Type',
-            dataIndex: 'field_type',
-            width: 110,
-            render: (v) => v || 'TEXT',
+            key: 'type',
+            width: 120,
+            render: (_, field) => (
+              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                {displayType(field)}
+              </span>
+            ),
           },
           {
             title: 'Mandatory',
@@ -252,6 +294,7 @@ export default function ManageColumnsModal({
               const key = rowKey(field, index);
               return (
                 <Switch
+                  size="small"
                   checked={Boolean(field.is_required)}
                   loading={savingId === key}
                   onChange={(checked) => toggleRequired(field, index, checked)}
@@ -260,14 +303,37 @@ export default function ManageColumnsModal({
             },
           },
           {
-            title: '',
+            title: 'Actions',
             key: 'actions',
-            width: 64,
-            render: (_, field) => (
-              <Popconfirm title="Remove this column from the table?" onConfirm={() => remove(field)}>
-                <Button type="text" danger icon={<DeleteOutlined />} />
-              </Popconfirm>
-            ),
+            width: 96,
+            align: 'center',
+            render: (_, field, index) => {
+              const key = rowKey(field, index);
+              const editing = editingKey === key;
+              return (
+                <Space size={0}>
+                  {editing ? (
+                    <Button
+                      type="link"
+                      size="small"
+                      loading={savingId === key}
+                      onClick={() => rename(field, index)}
+                    >
+                      Save
+                    </Button>
+                  ) : (
+                    <Button
+                      type="text"
+                      icon={<EditOutlined />}
+                      onClick={() => setEditingKey(key)}
+                    />
+                  )}
+                  <Popconfirm title="Remove this column from the table?" onConfirm={() => remove(field)}>
+                    <Button type="text" danger icon={<DeleteOutlined />} />
+                  </Popconfirm>
+                </Space>
+              );
+            },
           },
         ]}
       />
@@ -275,7 +341,7 @@ export default function ManageColumnsModal({
       <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
         <Typography.Text strong className="mb-3 block">Add column</Typography.Text>
         <Form form={addForm} layout="vertical" initialValues={{ field_type: 'TEXT', is_required: false }}>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
             <Form.Item
               name="field_label"
               label="Column name"
@@ -285,17 +351,33 @@ export default function ManageColumnsModal({
               <Input placeholder="e.g. GST Number" />
             </Form.Item>
             <Form.Item name="field_type" label="Type" rules={[{ required: true }]} className="!mb-2">
-              <Select options={FIELD_TYPES} />
+              <Select
+                options={FIELD_TYPES}
+                onChange={(v) => {
+                  setTypeChoice(v);
+                  if (v !== OTHER_TYPE) addForm.setFieldValue('custom_type', undefined);
+                }}
+              />
+            </Form.Item>
+            <Form.Item
+              name="is_required"
+              label="Mandatory"
+              valuePropName="checked"
+              className="!mb-2"
+            >
+              <Switch checkedChildren="Required" unCheckedChildren="Optional" />
             </Form.Item>
           </div>
-          <Form.Item
-            name="is_required"
-            label="Mandatory column"
-            valuePropName="checked"
-            className="!mb-3"
-          >
-            <Switch checkedChildren="Required" unCheckedChildren="Optional" />
-          </Form.Item>
+          {typeChoice === OTHER_TYPE ? (
+            <Form.Item
+              name="custom_type"
+              label="Custom type"
+              rules={[{ required: true, message: 'Enter custom type' }]}
+              className="!mb-2"
+            >
+              <Input placeholder="e.g. Barcode / Batch No" />
+            </Form.Item>
+          ) : null}
           <Button type="primary" icon={<PlusOutlined />} loading={adding} onClick={addColumn}>
             Add column
           </Button>

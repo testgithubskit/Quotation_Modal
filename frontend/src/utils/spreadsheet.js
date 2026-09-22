@@ -138,14 +138,6 @@ export function parseSpreadsheetFile(file) {
   });
 }
 
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function reportColumns(rows) {
   if (!rows?.length) return ['SL NO'];
   const keys = Object.keys(rows[0]).filter((k) => k !== '_sheet' && k !== 'SL NO' && k !== 'Sl No');
@@ -176,17 +168,6 @@ function formatGeneratedOn(date = new Date()) {
   });
 }
 
-function triggerDownload(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 /** Simple sheet (no report header) — used by template designer export */
 export function downloadRowsExcel(rows, filename = 'export.xlsx') {
   const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{ '': '' }]);
@@ -196,47 +177,49 @@ export function downloadRowsExcel(rows, filename = 'export.xlsx') {
 }
 
 /**
- * Report-style Excel with centered org name, title, SL NO, and full cell borders.
- * Written as HTML spreadsheet so Excel shows borders without a paid SheetJS build.
+ * Report-style Excel (.xlsx) with org name, title, SL NO, and data rows.
+ * Real Office Open XML workbook (not HTML disguised as .xls).
  */
-export function downloadReportExcel(rows, filename = 'export.xls', {
+export function downloadReportExcel(rows, filename = 'export.xlsx', {
   organizationName = 'Organization',
   title = 'Report',
 } = {}) {
   const columns = reportColumns(rows);
   const body = reportBody(rows, columns);
-  const colCount = columns.length;
   const generated = formatGeneratedOn();
-  const border = 'border:1px solid #94a3b8;';
-  const cell = `${border}padding:6px 8px;font-family:Arial,sans-serif;font-size:11px;color:#0f172a;`;
-  const headCell = `${border}padding:7px 8px;font-family:Arial,sans-serif;font-size:11px;font-weight:bold;color:#ffffff;background:#64748b;text-transform:uppercase;`;
+  const colCount = Math.max(columns.length, 1);
 
-  const headerRow = columns.map((c) => `<th style="${headCell}">${escapeHtml(c)}</th>`).join('');
-  const dataRows = body.map((cells, idx) => {
-    const bg = idx % 2 === 1 ? 'background:#f8fafc;' : 'background:#ffffff;';
-    return `<tr>${cells.map((v) => `<td style="${cell}${bg}">${escapeHtml(v)}</td>`).join('')}</tr>`;
-  }).join('');
+  const aoa = [
+    [organizationName],
+    [title],
+    [`Total rows: ${body.length}`],
+    [`Generated on: ${generated}`],
+    [],
+    columns,
+    ...(body.length ? body : [columns.map(() => '')]),
+  ];
 
-  const html = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
-<x:Name>Report</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
-</x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
-<body>
-<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;width:100%">
-  <tr><td colspan="${colCount}" style="text-align:center;font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#0f172a;padding:8px 4px">${escapeHtml(organizationName)}</td></tr>
-  <tr><td colspan="${colCount}" style="text-align:center;font-family:Arial,sans-serif;font-size:13px;font-weight:600;color:#475569;padding:2px 4px 10px">${escapeHtml(title)}</td></tr>
-  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:11px;color:#64748b;padding:2px 4px">Total rows: ${body.length}</td></tr>
-  <tr><td colspan="${colCount}" style="font-family:Arial,sans-serif;font-size:11px;color:#64748b;padding:2px 4px 12px">Generated on: ${escapeHtml(generated)}</td></tr>
-  <tr>${headerRow}</tr>
-  ${dataRows || `<tr><td colspan="${colCount}" style="${cell}">No rows</td></tr>`}
-</table>
-</body></html>`;
+  const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+  worksheet['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: colCount - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: colCount - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: colCount - 1 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: colCount - 1 } },
+  ];
+  worksheet['!cols'] = columns.map((c) => ({
+    wch: Math.min(40, Math.max(12, String(c).length + 4)),
+  }));
 
-  const safeName = filename.toLowerCase().endsWith('.xlsx')
-    ? `${filename.slice(0, -5)}.xls`
-    : (filename.toLowerCase().endsWith('.xls') ? filename : `${filename}.xls`);
-  triggerDownload(new Blob([html], { type: 'application/vnd.ms-excel' }), safeName);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Report');
+
+  let safeName = filename || 'export.xlsx';
+  if (safeName.toLowerCase().endsWith('.xls') && !safeName.toLowerCase().endsWith('.xlsx')) {
+    safeName = `${safeName.slice(0, -4)}.xlsx`;
+  } else if (!safeName.toLowerCase().endsWith('.xlsx')) {
+    safeName = `${safeName}.xlsx`;
+  }
+  XLSX.writeFile(workbook, safeName);
 }
 
 /** @param {Record<string, unknown>[]} rows */
@@ -244,36 +227,34 @@ export function downloadRowsPdf(rows, filename = 'export.pdf', title = 'Export')
   downloadReportPdf(rows, filename, { title, organizationName: '' });
 }
 
-/** Report-style PDF: centered org name, title, SL NO, grid borders */
+/** Report-style PDF: centered org name, title, SL NO, grid borders (tight production layout) */
 export function downloadReportPdf(rows, filename = 'export.pdf', {
   organizationName = '',
   title = 'Report',
 } = {}) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  let y = 36;
+  let y = 28;
 
   if (organizationName) {
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(16);
+    doc.setFontSize(14);
     doc.setTextColor(15, 23, 42);
     doc.text(String(organizationName).toUpperCase(), pageW / 2, y, { align: 'center' });
-    y += 20;
+    y += 16;
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.setTextColor(71, 85, 105);
+  doc.setFontSize(11);
+  doc.setTextColor(51, 65, 85);
   doc.text(String(title), pageW / 2, y, { align: 'center' });
-  y += 18;
+  y += 14;
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Total rows: ${rows?.length || 0}`, 40, y);
-  y += 12;
-  doc.text(`Generated on: ${formatGeneratedOn()}`, 40, y);
-  y += 14;
+  doc.text(`Total rows: ${rows?.length || 0}  ·  Generated on: ${formatGeneratedOn()}`, 36, y);
+  y += 10;
 
   const columns = reportColumns(rows);
   const body = reportBody(rows, columns);
@@ -284,23 +265,26 @@ export function downloadReportPdf(rows, filename = 'export.pdf', {
     body: body.length ? body : [columns.map((_, i) => (i === 0 ? '' : 'No rows'))],
     styles: {
       fontSize: 8,
-      cellPadding: 4,
-      lineColor: [148, 163, 184],
+      cellPadding: { top: 3, right: 4, bottom: 3, left: 4 },
+      lineColor: [0, 0, 0],
       lineWidth: 0.4,
-      textColor: [15, 23, 42],
+      textColor: [0, 0, 0],
       valign: 'middle',
+      overflow: 'linebreak',
     },
     headStyles: {
-      fillColor: [100, 116, 139],
+      fillColor: [13, 148, 136],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       halign: 'left',
-      lineColor: [148, 163, 184],
+      lineColor: [0, 0, 0],
       lineWidth: 0.4,
+      cellPadding: { top: 4, right: 4, bottom: 4, left: 4 },
     },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
+    alternateRowStyles: { fillColor: [255, 255, 255] },
     theme: 'grid',
-    margin: { left: 40, right: 40 },
+    margin: { left: 36, right: 36, top: 28, bottom: 28 },
+    tableWidth: 'auto',
   });
 
   doc.save(filename);

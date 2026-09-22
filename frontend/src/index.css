@@ -36,6 +36,24 @@
     background: rgba(255, 255, 255, 0.08) !important;
   }
 
+  .app-side .ant-menu-dark,
+  .app-side .ant-menu-dark .ant-menu-sub,
+  .app-side .ant-menu-dark .ant-menu-submenu,
+  .app-side .ant-menu-dark .ant-menu-submenu-title,
+  .app-side .ant-menu-dark.ant-menu-inline,
+  .app-side .ant-menu-dark .ant-menu-inline.ant-menu-sub {
+    background: #134e4a !important;
+  }
+
+  .app-side .ant-menu-dark .ant-menu-submenu-selected > .ant-menu-submenu-title {
+    background: transparent !important;
+  }
+
+  .app-side .ant-menu-dark .ant-menu-item,
+  .app-side .ant-menu-dark .ant-menu-submenu-title {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
   .items-table {
     @apply w-full border-collapse text-[13px];
   }
@@ -109,10 +127,12 @@
 
   .tiptap-editor .ProseMirror p {
     margin: 0;
+    min-height: 1.35em;
+    line-height: 1.35;
   }
 
   .tiptap-editor .ProseMirror p + p {
-    margin-top: 2px;
+    margin-top: 0;
   }
 
   .tiptap-editor .ProseMirror h1 {
@@ -149,9 +169,95 @@
     background: #fff;
   }
 
+  /* Honor per-side border overrides from designer tools */
+  .tiptap-editor .ProseMirror td[style*="border-top: none"],
+  .tiptap-editor .ProseMirror th[style*="border-top: none"] {
+    border-top: none !important;
+  }
+  .tiptap-editor .ProseMirror td[style*="border-right: none"],
+  .tiptap-editor .ProseMirror th[style*="border-right: none"] {
+    border-right: none !important;
+  }
+  .tiptap-editor .ProseMirror td[style*="border-bottom: none"],
+  .tiptap-editor .ProseMirror th[style*="border-bottom: none"] {
+    border-bottom: none !important;
+  }
+  .tiptap-editor .ProseMirror td[style*="border-left: none"],
+  .tiptap-editor .ProseMirror th[style*="border-left: none"] {
+    border-left: none !important;
+  }
+
   .tiptap-editor .ProseMirror th {
     background: #fff;
     font-weight: 600;
+  }
+
+  /* Template grid card — same HTML/table look as the designer canvas */
+  .template-card-preview {
+    color: #0f172a;
+    line-height: 1.35;
+  }
+
+  .template-card-preview p {
+    margin: 0;
+    min-height: 1.35em;
+    line-height: 1.35;
+  }
+
+  .template-card-preview p + p {
+    margin-top: 0;
+  }
+
+  .template-card-preview h1 {
+    font-size: 1.55em;
+    font-weight: 700;
+    margin: 0.4em 0 0.2em;
+  }
+
+  .template-card-preview h2 {
+    font-size: 1.3em;
+    font-weight: 700;
+    margin: 0.35em 0 0.15em;
+  }
+
+  .template-card-preview h3 {
+    font-size: 1.1em;
+    font-weight: 600;
+    margin: 0.3em 0 0.1em;
+  }
+
+  .template-card-preview table {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: 100%;
+    margin: 0.35em 0;
+  }
+
+  .template-card-preview td,
+  .template-card-preview th {
+    border: 1px solid #000;
+    padding: 0.2em 0.4em;
+    vertical-align: top;
+    word-break: break-word;
+    background: #fff;
+  }
+
+  .template-card-preview th {
+    font-weight: 600;
+  }
+
+  .template-card-preview img {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .template-card-preview .tableWrapper {
+    margin: 0.35em 0;
+    overflow: hidden;
+  }
+
+  .template-card-thumb {
+    background: #e8eef5;
   }
 
   .tiptap-editor .ProseMirror .selectedCell {
@@ -315,6 +421,107 @@
     font-size: 11px;
     border-top: 1px dashed #e2e8f0;
     margin-top: 4px;
+  }
+
+  /* App data tables — themed header (sidebar active green) + uniform row height */
+  .app-data-table .ant-table-container {
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+  }
+
+  /* Kill Ant scroll-table header/body seam (white gap under sticky thead) */
+  .app-data-table .ant-table-header {
+    margin-bottom: 0 !important;
+    padding-bottom: 0 !important;
+    border-bottom: none !important;
+    overflow: hidden !important;
+  }
+
+  .app-data-table .ant-table-header table,
+  .app-data-table .ant-table-body table,
+  .app-data-table .ant-table-summary table {
+    border-collapse: collapse !important;
+  }
+
+  .app-data-table .ant-table-thead > tr > th {
+    background: #0d9488 !important;
+    color: #ffffff !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    letter-spacing: 0.02em;
+    border-bottom: none !important;
+    border-top: none !important;
+    padding: 12px 14px !important;
+    white-space: nowrap;
+  }
+
+  .app-data-table .ant-table-thead > tr > th .ant-table-column-sorter {
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .app-data-table .ant-table-thead > tr > th .ant-table-column-sorter-up.active,
+  .app-data-table .ant-table-thead > tr > th .ant-table-column-sorter-down.active {
+    color: #ffffff !important;
+  }
+
+  .app-data-table .ant-table-thead > tr > th .ant-table-column-title {
+    color: #ffffff !important;
+  }
+
+  .app-data-table .ant-table-tbody > tr.ant-table-measure-row > td {
+    padding: 0 !important;
+    border: 0 !important;
+    height: 0 !important;
+    line-height: 0 !important;
+    font-size: 0 !important;
+  }
+
+  .app-data-table .ant-table-tbody > tr > td {
+    padding: 12px 14px !important;
+    height: 52px;
+    vertical-align: middle !important;
+    border-top: none !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    font-size: 13px;
+    color: #334155;
+  }
+
+  .app-data-table .ant-table-tbody > tr:hover > td {
+    background: #f0fdfa !important;
+  }
+
+  .manage-columns-table .ant-table-body {
+    overflow-y: auto !important;
+  }
+
+  /* Filled template / PDF preview — tight production-style tables */
+  .report-preview-body table {
+    border-collapse: collapse !important;
+    width: 100%;
+    margin: 0;
+  }
+
+  .report-preview-body td,
+  .report-preview-body th {
+    border: 1px solid #000 !important;
+    padding: 3px 6px !important;
+    vertical-align: top;
+    background: #fff;
+  }
+
+  .report-preview-body th {
+    font-weight: 600;
+  }
+
+  .report-preview-body p {
+    margin: 0;
+    min-height: 1.35em;
+    line-height: 1.35;
+  }
+
+  .report-preview-body img {
+    max-width: 100%;
+    height: auto;
   }
 
   /* Word-like selection format bar */

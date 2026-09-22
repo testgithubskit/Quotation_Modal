@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Avatar, Layout, Menu, Tooltip } from 'antd';
 import { LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -14,6 +14,17 @@ function initials(name) {
   return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
+function parentKeysForSelection(items, selectedKeys) {
+  const selected = new Set(selectedKeys || []);
+  const open = [];
+  (items || []).forEach((item) => {
+    if (item?.children?.some((child) => selected.has(child.key))) {
+      open.push(item.key);
+    }
+  });
+  return open;
+}
+
 export default function Sidebar({
   items = [],
   selectedKeys = [],
@@ -24,6 +35,15 @@ export default function Sidebar({
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const displayName = user?.full_name || user?.email || 'User';
+  const autoOpenKeys = useMemo(
+    () => parentKeysForSelection(items, selectedKeys),
+    [items, selectedKeys],
+  );
+  const [openKeys, setOpenKeys] = useState(autoOpenKeys);
+
+  useEffect(() => {
+    setOpenKeys((prev) => Array.from(new Set([...prev, ...autoOpenKeys])));
+  }, [autoOpenKeys]);
 
   const handleLogout = async () => {
     await logout();
@@ -57,6 +77,8 @@ export default function Sidebar({
             theme="dark"
             mode="inline"
             selectedKeys={selectedKeys}
+            openKeys={collapsed ? [] : openKeys}
+            onOpenChange={setOpenKeys}
             items={items}
             onClick={onMenuClick}
             inlineCollapsed={collapsed}
