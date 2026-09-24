@@ -8,7 +8,7 @@ import {
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
-import { recordMatchesSearch, slNoColumn } from '../../utils/tableHelpers';
+import { configTableScroll, recordMatchesSearch, slNoColumn } from '../../utils/tableHelpers';
 import {
   digitsOnlyPhone,
   isPhoneLikeField,
@@ -322,7 +322,7 @@ export default function Team() {
           loading={loading}
           dataSource={paged}
           columns={columns}
-          scroll={{ x: 'max-content' }}
+          scroll={configTableScroll}
           pagination={{
             current: page,
             pageSize,

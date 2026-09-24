@@ -6,7 +6,7 @@ export const REPORT_PLACEHOLDERS = [
   { token: '{{mobile}}', label: 'Mobile' },
   { token: '{{email}}', label: 'Email' },
   { token: '{{subject}}', label: 'Subject' },
-  { token: '{{items_table}}', label: 'Items Table' },
+  { token: '{{items_table}}', label: 'Activities Table' },
   { token: '{{grand_total}}', label: 'Grand Total' },
   { token: '{{terms}}', label: 'Terms' },
   { token: '{{activity_notes}}', label: 'Activity Notes' },

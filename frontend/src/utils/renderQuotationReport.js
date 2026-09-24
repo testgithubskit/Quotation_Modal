@@ -175,13 +175,22 @@ function fillPlaceholders(html, map) {
   let out = String(html);
   // Chip spans from designer
   out = out.replace(
-    /<span[^>]*\bdata-placeholder=["']([^"']+)["'][^>]*>[\s\S]*?<\/span>/gi,
-    (_, key) => {
-      if (Object.prototype.hasOwnProperty.call(map, key)) {
-        const v = map[key];
-        return v == null ? '' : String(v);
-      }
-      return '';
+    /<span\b([^>]*\bdata-placeholder=["']([^"']+)["'][^>]*)>[\s\S]*?<\/span>/gi,
+    (full, attrs, key) => {
+      if (!Object.prototype.hasOwnProperty.call(map, key)) return '';
+      const v = map[key];
+      if (v == null) return '';
+      const text = String(v);
+      const styleMatch = String(attrs).match(/\bstyle=["']([^"']*)["']/i);
+      const style = styleMatch?.[1] || '';
+      const family = style.match(/font-family:\s*([^;]+)/i);
+      const size = style.match(/font-size:\s*([^;]+)/i);
+      const kept = [
+        family ? `font-family: ${family[1].trim()}` : '',
+        size ? `font-size: ${size[1].trim()}` : '',
+      ].filter(Boolean).join('; ');
+      if (!kept || text.trim().startsWith('<')) return text;
+      return `<span style="${kept}">${text}</span>`;
     },
   );
   // Legacy {{token}}
@@ -433,16 +442,14 @@ function triggerBlobDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-/**
- * Download filled quotation as PDF via backend Playwright (Chromium).
- * Falls back to browser print if the PDF service is unavailable.
- */
-export async function downloadQuotationPdfViaChromium({
-  report,
-  customer,
-  template,
-  organization,
-} = {}) {
+function quotationPdfFilename(report) {
+  return datedFilename(
+    `quotation-${report?.quotation_number || 'report'}`,
+    'pdf',
+  );
+}
+
+function buildQuotationPdfHtml({ report, customer, template, organization } = {}) {
   const td = template?.template_data || {};
   const pageSettings = {
     ...DEFAULT_PAGE_SETTINGS,
@@ -472,29 +479,50 @@ export async function downloadQuotationPdfViaChromium({
 </body></html>`;
   }
 
-  const filename = datedFilename(
-    `quotation-${report?.quotation_number || 'report'}`,
-    'pdf',
+  return { html, pageSettings, filename: quotationPdfFilename(report) };
+}
+
+async function renderQuotationPdfBlob(ctx) {
+  const { html, pageSettings, filename } = buildQuotationPdfHtml(ctx);
+  const { api } = await import('../config/auth.js');
+  const { data } = await api.post(
+    '/pdf/render',
+    {
+      html,
+      page_size: pageSettings.pageSize || 'A4',
+      orientation: pageSettings.orientation || 'portrait',
+      margins: pageSettings.margins || DEFAULT_PAGE_SETTINGS.margins,
+      filename,
+    },
+    { responseType: 'blob' },
   );
+  const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' });
+  if (blob.type && blob.type.includes('json')) {
+    const text = await blob.text();
+    throw new Error(text || 'PDF render failed');
+  }
+  return blob;
+}
+
+/** Object URL for iframe PDF preview (revoke when done). */
+export async function fetchQuotationPdfObjectUrl(ctx) {
+  const blob = await renderQuotationPdfBlob(ctx);
+  return URL.createObjectURL(blob);
+}
+
+export function revokeQuotationPdfObjectUrl(url) {
+  if (url) URL.revokeObjectURL(url);
+}
+
+/**
+ * Download filled quotation as PDF via backend Playwright (Chromium).
+ * Falls back to browser print if the PDF service is unavailable.
+ */
+export async function downloadQuotationPdfViaChromium(ctx = {}) {
+  const { html, pageSettings, filename } = buildQuotationPdfHtml(ctx);
 
   try {
-    const { api } = await import('../config/auth.js');
-    const { data } = await api.post(
-      '/pdf/render',
-      {
-        html,
-        page_size: pageSettings.pageSize || 'A4',
-        orientation: pageSettings.orientation || 'portrait',
-        margins: pageSettings.margins || DEFAULT_PAGE_SETTINGS.margins,
-        filename,
-      },
-      { responseType: 'blob' },
-    );
-    const blob = data instanceof Blob ? data : new Blob([data], { type: 'application/pdf' });
-    if (blob.type && blob.type.includes('json')) {
-      const text = await blob.text();
-      throw new Error(text || 'PDF render failed');
-    }
+    const blob = await renderQuotationPdfBlob(ctx);
     triggerBlobDownload(blob, filename);
     return;
   } catch (error) {
@@ -519,7 +547,7 @@ export async function downloadQuotationPdfViaChromium({
     w.document.open();
     w.document.write(html);
     w.document.close();
-    w.document.title = report?.quotation_number || 'Report';
+    w.document.title = ctx.report?.quotation_number || 'Report';
     setTimeout(() => {
       w.focus();
       w.print();

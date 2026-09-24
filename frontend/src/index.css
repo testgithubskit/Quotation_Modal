@@ -27,31 +27,60 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Ant menu selected state on teal sidebar */
-  .app-side .ant-menu-dark .ant-menu-item-selected {
-    background: #0d9488 !important;
+  .app-side .ant-menu-light .ant-menu-item,
+  .app-side .ant-menu-light .ant-menu-submenu-title {
+    border-radius: 8px !important;
+    width: calc(100% - 16px) !important;
+    margin-inline: 8px !important;
+    color: #64748b !important;
   }
 
-  .app-side .ant-menu-dark .ant-menu-item:hover {
-    background: rgba(255, 255, 255, 0.08) !important;
+  .app-side .ant-menu-light .ant-menu-item::after,
+  .app-side .ant-menu-light .ant-menu-submenu-title::after,
+  .app-side .ant-menu-sub.ant-menu-inline::before,
+  .app-side .ant-menu-item-selected::before {
+    display: none !important;
   }
 
-  .app-side .ant-menu-dark,
-  .app-side .ant-menu-dark .ant-menu-sub,
-  .app-side .ant-menu-dark .ant-menu-submenu,
-  .app-side .ant-menu-dark .ant-menu-submenu-title,
-  .app-side .ant-menu-dark.ant-menu-inline,
-  .app-side .ant-menu-dark .ant-menu-inline.ant-menu-sub {
-    background: #134e4a !important;
-  }
-
-  .app-side .ant-menu-dark .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  .app-side .ant-menu-sub.ant-menu-inline {
     background: transparent !important;
   }
 
-  .app-side .ant-menu-dark .ant-menu-item,
-  .app-side .ant-menu-dark .ant-menu-submenu-title {
-    color: rgba(255, 255, 255, 0.85);
+  .app-side .ant-menu-light .ant-menu-item-selected {
+    background: #d1fae5 !important;
+    color: #0f766e !important;
+    font-weight: 600;
+  }
+
+  .app-side .ant-menu-light .ant-menu-item:hover,
+  .app-side .ant-menu-light .ant-menu-submenu-title:hover {
+    background: #f0fdf4 !important;
+    color: #0f766e !important;
+  }
+
+  .app-side .ant-menu-light .ant-menu-item-selected:hover {
+    background: #d1fae5 !important;
+    color: #0f766e !important;
+  }
+
+  .app-side.ant-layout-sider-collapsed .ant-menu-light .ant-menu-item,
+  .app-side.ant-layout-sider-collapsed .ant-menu-light .ant-menu-submenu-title {
+    width: calc(100% - 8px) !important;
+    margin-inline: 4px !important;
+  }
+
+  .app-side .ant-menu-light,
+  .app-side .ant-menu-light .ant-menu-sub,
+  .app-side .ant-menu-light .ant-menu-submenu,
+  .app-side .ant-menu-light .ant-menu-submenu-title,
+  .app-side .ant-menu-light.ant-menu-inline,
+  .app-side .ant-menu-light .ant-menu-inline.ant-menu-sub {
+    background: #fff !important;
+  }
+
+  .app-side .ant-menu-light .ant-menu-submenu-selected > .ant-menu-submenu-title {
+    background: transparent !important;
+    color: rgba(0, 0, 0, 0.88) !important;
   }
 
   .items-table {
@@ -96,7 +125,8 @@
     color: #0369a1;
     padding: 1px 7px;
     border-radius: 3px;
-    font-size: 0.95em;
+    font-size: inherit;
+    font-family: inherit;
     line-height: 1.45;
     white-space: nowrap;
     user-select: none;
@@ -441,6 +471,47 @@
   .app-data-table .ant-table-body table,
   .app-data-table .ant-table-summary table {
     border-collapse: collapse !important;
+  }
+
+  .config-tabs.ant-tabs {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .config-tabs > .ant-tabs-nav {
+    flex-shrink: 0;
+  }
+
+  .config-tabs .ant-tabs-content-holder {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .config-tabs .ant-tabs-content {
+    height: 100%;
+  }
+
+  .config-tabs .ant-tabs-tabpane {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .config-tabs .ant-tabs-tabpane-active {
+    display: flex !important;
+    flex-direction: column;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Same scroll viewport as Activities table (admin list pages) */
+  .admin-scroll-pane {
+    max-height: calc(100vh - 380px);
   }
 
   .app-data-table .ant-table-thead > tr > th {

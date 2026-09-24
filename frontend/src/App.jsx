@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { App as AntApp, ConfigProvider, Spin } from 'antd';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, homePathForUser, useAuth } from './config/AuthContext.jsx';
+import { installAutofillGuard } from './utils/disableAutofill.js';
 import Login from './Pages/Login';
 import Admin from './Pages/Admin';
 import User from './Pages/User';
@@ -33,6 +35,8 @@ function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => installAutofillGuard(), []);
+
   return (
     <ConfigProvider
       theme={{

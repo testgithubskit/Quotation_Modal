@@ -24,6 +24,16 @@ export const ReportPlaceholder = Node.create({
         parseHTML: (el) => el.getAttribute('data-label') || el.textContent,
         renderHTML: (attrs) => (attrs.label ? { 'data-label': attrs.label } : {}),
       },
+      fontFamily: {
+        default: null,
+        parseHTML: (el) => el.style.fontFamily || null,
+        renderHTML: () => ({}),
+      },
+      fontSize: {
+        default: null,
+        parseHTML: (el) => el.style.fontSize || null,
+        renderHTML: () => ({}),
+      },
     };
   },
 
@@ -33,6 +43,10 @@ export const ReportPlaceholder = Node.create({
 
   renderHTML({ node }) {
     const label = node.attrs.label || node.attrs.key || 'field';
+    const style = [
+      node.attrs.fontFamily ? `font-family: ${node.attrs.fontFamily}` : '',
+      node.attrs.fontSize ? `font-size: ${node.attrs.fontSize}` : '',
+    ].filter(Boolean).join('; ');
     return [
       'span',
       {
@@ -40,11 +54,45 @@ export const ReportPlaceholder = Node.create({
         'data-label': label,
         class: 'report-placeholder-chip',
         contenteditable: 'false',
+        ...(style ? { style } : {}),
       },
       label,
     ];
   },
 });
+
+export function activeEditorFont(editor) {
+  if (!editor) return { fontFamily: undefined, fontSize: undefined };
+  if (editor.isActive('reportPlaceholder')) {
+    const attrs = editor.getAttributes('reportPlaceholder') || {};
+    return {
+      fontFamily: attrs.fontFamily || undefined,
+      fontSize: attrs.fontSize || undefined,
+    };
+  }
+  const attrs = editor.getAttributes('textStyle') || {};
+  return {
+    fontFamily: attrs.fontFamily || undefined,
+    fontSize: attrs.fontSize || undefined,
+  };
+}
+
+export function applyEditorFont(editor, patch) {
+  if (!editor) return;
+  if (editor.isActive('reportPlaceholder')) {
+    const next = {};
+    if ('fontFamily' in patch) next.fontFamily = patch.fontFamily || null;
+    if ('fontSize' in patch) next.fontSize = patch.fontSize || null;
+    editor.chain().focus().updateAttributes('reportPlaceholder', next).run();
+    return;
+  }
+  let chain = editor.chain().focus();
+  if (patch.fontFamily) chain = chain.setFontFamily(patch.fontFamily);
+  else if ('fontFamily' in patch) chain = chain.unsetFontFamily();
+  if (patch.fontSize) chain = chain.setFontSize(patch.fontSize);
+  else if ('fontSize' in patch) chain = chain.unsetFontSize();
+  chain.run();
+}
 
 /** Convert legacy {{token}} plain text in HTML into chip spans. */
 export function hydratePlaceholderChips(html, placeholders = []) {

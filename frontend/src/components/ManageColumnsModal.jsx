@@ -50,6 +50,8 @@ export default function ManageColumnsModal({
   fields,
   builtinFields,
   onChanged,
+  onUpdateBuiltin,
+  onHideBuiltin,
 }) {
   const [addForm] = Form.useForm();
   const [savingId, setSavingId] = useState(null);
@@ -101,7 +103,7 @@ export default function ManageColumnsModal({
     setSavingId(key);
     try {
       if (field.is_builtin) {
-        updateActivityBuiltinColumn(field.field_key, { field_label: label });
+        (onUpdateBuiltin || updateActivityBuiltinColumn)(field.field_key, { field_label: label });
         message.success('Column renamed');
         onChanged?.();
       } else {
@@ -122,7 +124,7 @@ export default function ManageColumnsModal({
     setSavingId(key);
     try {
       if (field.is_builtin) {
-        updateActivityBuiltinColumn(field.field_key, { is_required: checked });
+        (onUpdateBuiltin || updateActivityBuiltinColumn)(field.field_key, { is_required: checked });
         message.success(checked ? 'Marked mandatory' : 'Marked optional');
         onChanged?.();
       } else {
@@ -140,7 +142,7 @@ export default function ManageColumnsModal({
   const remove = async (field) => {
     try {
       if (field.is_builtin) {
-        hideActivityBuiltinColumn(field.field_key);
+        (onHideBuiltin || hideActivityBuiltinColumn)(field.field_key);
         message.success('Column removed from table');
         onChanged?.();
         return;
@@ -175,7 +177,7 @@ export default function ManageColumnsModal({
 
       const builtinKeys = ['name', 'description', 'unit', 'unit_price'];
       if (builtinKeys.includes(field_key) && entityType === 'ACTIVITY') {
-        updateActivityBuiltinColumn(field_key, {
+        (onUpdateBuiltin || updateActivityBuiltinColumn)(field_key, {
           is_hidden: false,
           field_label,
           is_required: Boolean(values.is_required),
@@ -195,7 +197,7 @@ export default function ManageColumnsModal({
         ),
       );
       if (hiddenBuiltin) {
-        updateActivityBuiltinColumn(hiddenBuiltin.field_key, {
+        (onUpdateBuiltin || updateActivityBuiltinColumn)(hiddenBuiltin.field_key, {
           is_hidden: false,
           field_label,
           is_required: Boolean(values.is_required),

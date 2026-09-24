@@ -1,17 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Col, Modal, Row, Spin, Table, Tooltip, Typography, message } from 'antd';
-import { CloseOutlined, DownloadOutlined, EyeOutlined } from '@ant-design/icons';
+import { Button, Col, Row, Spin, Table, Tooltip, Typography, message } from 'antd';
+import { EyeOutlined } from '@ant-design/icons';
+import QuotationPdfPreviewModal from '../../Components/QuotationPdfPreviewModal.jsx';
+import useQuotationPdfPreview from '../../hooks/useQuotationPdfPreview.js';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { slNoColumn } from '../../utils/tableHelpers';
-import {
-  downloadQuotationPdfViaChromium,
-  preserveBlankParagraphs,
-  renderQuotationDocument,
-  resolveLineItems,
-} from '../../utils/renderQuotationReport.js';
-
 function StatCard({ label, value, onClick }) {
   return (
     <button
@@ -25,61 +20,6 @@ function StatCard({ label, value, onClick }) {
   );
 }
 
-function ReportPreviewContent({ report, customer, template, organization }) {
-  const doc = renderQuotationDocument({ report, customer, template, organization });
-  if (!doc.hasContent) {
-    const lines = resolveLineItems(report);
-    return (
-      <div className="space-y-3 text-sm text-slate-600">
-        <div><strong>Customer:</strong> {customer?.name || '—'}</div>
-        <div><strong>Total:</strong> ₹{Number(report.total || 0).toLocaleString('en-IN')}</div>
-        <table className="mt-3 w-full border-collapse text-left">
-          <thead>
-            <tr className="bg-teal-50">
-              <th className="border p-2">Sl No</th>
-              <th className="border p-2">Activity</th>
-              <th className="border p-2">Qty</th>
-              <th className="border p-2">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((item) => (
-              <tr key={item.slNo}>
-                <td className="border p-2 text-center">{item.slNo}</td>
-                <td className="border p-2">{item.activityName || '—'}</td>
-                <td className="border p-2">{item.quantity} {item.unit}</td>
-                <td className="border p-2">₹{Number(item.total || 0).toLocaleString('en-IN')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
-  const m = doc.pageSettings.margins || {};
-  return (
-    <div className="max-h-[70vh] overflow-auto bg-slate-200 p-4">
-      <div
-        className="report-preview-body mx-auto bg-white shadow-md"
-        style={{
-          width: Math.min(doc.width, 780),
-          minHeight: doc.height * (Math.min(doc.width, 780) / doc.width),
-          padding: `${m.top || 5}mm ${m.right || 5}mm ${m.bottom || 5}mm ${m.left || 5}mm`,
-          fontFamily: `${doc.pageSettings.fontFamily || 'Times New Roman'}, Arial, sans-serif`,
-          fontSize: doc.pageSettings.fontSize || '12px',
-        }}
-      >
-        <div dangerouslySetInnerHTML={{ __html: preserveBlankParagraphs(doc.headerHtml) }} />
-        <div
-          style={{ margin: `${doc.pageSettings.headerSpacing || 0}mm 0` }}
-          dangerouslySetInnerHTML={{ __html: preserveBlankParagraphs(doc.bodyHtml) }}
-        />
-        <div dangerouslySetInnerHTML={{ __html: preserveBlankParagraphs(doc.footerHtml) }} />
-      </div>
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -90,9 +30,7 @@ export default function Dashboard() {
   const [templatesById, setTemplatesById] = useState({});
   const [activities, setActivities] = useState([]);
   const [busyId, setBusyId] = useState(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewCtx, setPreviewCtx] = useState(null);
-  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const pdfPreview = useQuotationPdfPreview();
 
   const load = async () => {
     setLoading(true);
@@ -146,13 +84,12 @@ export default function Dashboard() {
       } catch {
         organization = null;
       }
-      setPreviewCtx({
+      await pdfPreview.openPreview({
         report: full,
         customer: customersById[full.customer_id],
         template,
         organization,
       });
-      setPreviewOpen(true);
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to open report'));
     } finally {
@@ -170,16 +107,12 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto">
-      <Typography.Title level={3} className="!mb-0 !font-sans !text-teal-800">
-        Dashboard
-      </Typography.Title>
-
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Users" value={users.length} onClick={() => navigate('/admin/team')} />
+          <StatCard label="Users" value={users.length} onClick={() => navigate('/admin/configuration?tab=user')} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Customers" value={customers.length} onClick={() => navigate('/admin/customers')} />
+          <StatCard label="Customers" value={customers.length} onClick={() => navigate('/admin/configuration?tab=customers')} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <StatCard label="Activities" value={activities.length} onClick={() => navigate('/admin/activities')} />
@@ -254,62 +187,13 @@ export default function Dashboard() {
         />
       </div>
 
-      <Modal
-        open={previewOpen}
-        onCancel={() => {
-          setPreviewOpen(false);
-          setPreviewCtx(null);
-        }}
-        title={previewCtx?.report?.quotation_number || 'Report preview'}
-        width={900}
-        centered
-        destroyOnClose
-        maskClosable={false}
-        keyboard={false}
-        closable
-        closeIcon={<CloseOutlined />}
-        footer={(
-          <div className="flex justify-end gap-2">
-            <Button
-              onClick={() => {
-                setPreviewOpen(false);
-                setPreviewCtx(null);
-              }}
-            >
-              Close
-            </Button>
-            <Button
-              type="primary"
-              icon={<DownloadOutlined />}
-              loading={pdfDownloading}
-              className="!bg-teal-600 hover:!bg-teal-700"
-              onClick={async () => {
-                if (!previewCtx) return;
-                setPdfDownloading(true);
-                try {
-                  await downloadQuotationPdfViaChromium(previewCtx);
-                  message.success('PDF downloaded');
-                } catch (error) {
-                  message.error(error?.message || 'PDF download failed');
-                } finally {
-                  setPdfDownloading(false);
-                }
-              }}
-            >
-              Download PDF
-            </Button>
-          </div>
-        )}
-      >
-        {previewCtx ? (
-          <ReportPreviewContent
-            report={previewCtx.report}
-            customer={previewCtx.customer}
-            template={previewCtx.template}
-            organization={previewCtx.organization}
-          />
-        ) : null}
-      </Modal>
+      <QuotationPdfPreviewModal
+        open={pdfPreview.open}
+        title={pdfPreview.ctx?.report?.quotation_number || 'Report preview'}
+        loading={pdfPreview.loading}
+        pdfUrl={pdfPreview.pdfUrl}
+        onClose={pdfPreview.close}
+      />
     </div>
   );
 }

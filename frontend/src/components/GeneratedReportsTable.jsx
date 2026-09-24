@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Empty, Modal, Pagination, Popconfirm, Select, Space, Spin, Table, Tooltip, message,
+  Button, Dropdown, Empty, Pagination, Popconfirm, Select, Space, Spin, Table, Tooltip, message,
 } from 'antd';
 import {
-  AppstoreOutlined, CloseOutlined, DeleteOutlined, DownloadOutlined, EyeOutlined,
+  AppstoreOutlined, DeleteOutlined, DownloadOutlined, EyeOutlined,
   FileExcelOutlined, FilePdfOutlined, FileTextOutlined, ReloadOutlined, UnorderedListOutlined,
 } from '@ant-design/icons';
+import QuotationPdfPreviewModal from './QuotationPdfPreviewModal.jsx';
+import useQuotationPdfPreview from '../hooks/useQuotationPdfPreview.js';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../config/auth.js';
 import { recordMatchesSearch, slNoColumn } from '../utils/tableHelpers';
@@ -234,10 +236,9 @@ export default function GeneratedReportsTable({ active = true }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [busyId, setBusyId] = useState(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewCtx, setPreviewCtx] = useState(null);
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [cardCtxById, setCardCtxById] = useState({});
+  const pdfPreview = useQuotationPdfPreview();
 
   const load = async () => {
     setLoading(true);
@@ -333,11 +334,6 @@ export default function GeneratedReportsTable({ active = true }) {
     }
   };
 
-  const closePreview = () => {
-    setPreviewOpen(false);
-    setPreviewCtx(null);
-  };
-
   const downloadPdf = async (ctx) => {
     setPdfDownloading(true);
     try {
@@ -414,18 +410,13 @@ export default function GeneratedReportsTable({ active = true }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, paged.map((r) => r.id).join(','), customersById, templatesById]);
 
-  const previewReport = previewCtx?.report;
-
   const openPreview = (record) => {
-    withContext(record, (ctx) => {
-      setPreviewCtx(ctx);
-      setPreviewOpen(true);
-    });
+    withContext(record, (ctx) => pdfPreview.openPreview(ctx));
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
         <div className="flex max-w-md flex-1 overflow-hidden rounded-lg border border-slate-300 bg-white">
           <input
             className="min-w-0 flex-1 border-0 px-3 py-2 text-sm outline-none"
@@ -473,6 +464,7 @@ export default function GeneratedReportsTable({ active = true }) {
         </Tooltip>
       </div>
 
+      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
       {loading && !rows.length ? (
         <div className="flex flex-1 items-center justify-center py-16">
           <Spin />
@@ -624,60 +616,15 @@ export default function GeneratedReportsTable({ active = true }) {
           />
         </div>
       )}
+      </div>
 
-      <Modal
-        open={previewOpen}
-        onCancel={closePreview}
-        title={previewReport?.quotation_number || 'Report preview'}
-        width={900}
-        centered
-        destroyOnClose
-        maskClosable={false}
-        keyboard={false}
-        closable
-        closeIcon={<CloseOutlined />}
-        footer={(
-          <div className="flex justify-end gap-2">
-            <Button onClick={closePreview}>Close</Button>
-            <Dropdown
-              menu={{
-                items: [
-                  {
-                    key: 'pdf',
-                    icon: <FilePdfOutlined />,
-                    label: 'Download as PDF',
-                    onClick: () => previewCtx && downloadPdf(previewCtx),
-                  },
-                  {
-                    key: 'excel',
-                    icon: <FileExcelOutlined />,
-                    label: 'Download as Excel',
-                    onClick: () => previewCtx && downloadExcel(previewCtx),
-                  },
-                ],
-              }}
-            >
-              <Button
-                type="primary"
-                icon={<DownloadOutlined />}
-                loading={pdfDownloading}
-                className="!bg-teal-600 hover:!bg-teal-700"
-              >
-                Download
-              </Button>
-            </Dropdown>
-          </div>
-        )}
-      >
-        {previewCtx ? (
-          <ReportPreviewContent
-            report={previewCtx.report}
-            customer={previewCtx.customer}
-            template={previewCtx.template}
-            organization={previewCtx.organization}
-          />
-        ) : null}
-      </Modal>
+      <QuotationPdfPreviewModal
+        open={pdfPreview.open}
+        title={pdfPreview.ctx?.report?.quotation_number || 'Report preview'}
+        loading={pdfPreview.loading}
+        pdfUrl={pdfPreview.pdfUrl}
+        onClose={pdfPreview.close}
+      />
     </div>
   );
 }

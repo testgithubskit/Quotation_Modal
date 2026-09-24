@@ -1,42 +1,41 @@
 import { Layout } from 'antd';
 import {
   DashboardOutlined,
-  UserOutlined,
   AppstoreOutlined,
   BankOutlined,
   FileTextOutlined,
   FormOutlined,
   FileDoneOutlined,
-  TeamOutlined,
 } from '@ant-design/icons';
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import Footer from '../Components/Footer';
+import Navbar from '../Components/Navbar';
 import RequireRole from '../Components/RequireRole';
 import Sidebar from '../Components/sidebar';
 import Dashboard from './AdminComponents/Dashboard';
-import Customers from './AdminComponents/Customers';
 import Activities from './AdminComponents/Activities';
 import Configuration from './AdminComponents/Configuration';
 import Templates from './AdminComponents/Templates';
 import GeneratedReports from './AdminComponents/GeneratedReports';
-import Team from './AdminComponents/Team';
 
 const { Content } = Layout;
 
-const PATH_KEY = [
-  ['/admin/customers', 'customers'],
-  ['/admin/activities', 'activities'],
-  ['/admin/report/design', 'report-design'],
-  ['/admin/report/generated', 'report-generated'],
-  ['/admin/templates', 'report-design'],
-  ['/admin/configuration', 'configuration'],
-  ['/admin/team', 'team'],
-  ['/admin', 'dashboard'],
+const PATH_META = [
+  ['/admin/activities', 'activities', 'Activities'],
+  ['/admin/report/design', 'report-design', 'Design template'],
+  ['/admin/report/generated', 'report-generated', 'Generated Reports'],
+  ['/admin/templates', 'report-design', 'Design template'],
+  ['/admin/configuration', 'configuration', 'Configuration'],
+  ['/admin/customers', 'configuration', 'Configuration'],
+  ['/admin', 'dashboard', 'Dashboard'],
 ];
 
 function AdminShell() {
   const location = useLocation();
   const navigate = useNavigate();
-  const selectedKey = PATH_KEY.find(([path]) => location.pathname.startsWith(path))?.[1] || 'dashboard';
+  const meta = PATH_META.find(([path]) => location.pathname.startsWith(path));
+  const selectedKey = meta?.[1] || 'dashboard';
+  const pageTitle = meta?.[2] || 'Dashboard';
 
   return (
     <Layout className="flex h-screen overflow-hidden !bg-transparent">
@@ -44,18 +43,16 @@ function AdminShell() {
         selectedKeys={[selectedKey]}
         items={[
           { key: 'dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
-          { key: 'team', icon: <TeamOutlined />, label: 'Users' },
-          { key: 'customers', icon: <UserOutlined />, label: 'Customers' },
-          { key: 'activities', icon: <AppstoreOutlined />, label: 'Activities' },
           {
             key: 'report',
             icon: <FileTextOutlined />,
-            label: 'Report',
+            label: 'Reports',
             children: [
               { key: 'report-design', icon: <FormOutlined />, label: 'Design template' },
               { key: 'report-generated', icon: <FileDoneOutlined />, label: 'Generated Reports' },
             ],
           },
+          { key: 'activities', icon: <AppstoreOutlined />, label: 'Activities' },
           { key: 'configuration', icon: <BankOutlined />, label: 'Configuration' },
         ]}
         onMenuClick={({ key }) => {
@@ -66,9 +63,13 @@ function AdminShell() {
           else navigate(`/admin/${key}`);
         }}
       />
-      <Content className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 p-4 font-sans">
-        <Outlet />
-      </Content>
+      <Layout className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden !bg-slate-100">
+        <Navbar title={pageTitle} />
+        <Content className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 font-sans">
+          <Outlet />
+        </Content>
+        <Footer />
+      </Layout>
     </Layout>
   );
 }
@@ -79,8 +80,8 @@ export default function Admin() {
       <Route element={<RequireRole allowed="admin" />}>
         <Route element={<AdminShell />}>
           <Route index element={<Dashboard />} />
-          <Route path="team" element={<Team />} />
-          <Route path="customers" element={<Customers />} />
+          <Route path="team" element={<Navigate to="/admin/configuration?tab=user" replace />} />
+          <Route path="customers" element={<Navigate to="/admin/configuration?tab=customers" replace />} />
           <Route path="activities" element={<Activities />} />
           <Route path="report/design" element={<Templates />} />
           <Route path="report/generated" element={<GeneratedReports />} />

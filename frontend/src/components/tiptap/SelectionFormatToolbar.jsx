@@ -8,6 +8,7 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons';
 import { FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS } from '../../utils/reportPlaceholders.js';
+import { applyEditorFont, activeEditorFont } from './ReportPlaceholder.js';
 
 function Btn({ title, active, onClick, icon }) {
   return (
@@ -92,9 +93,8 @@ export default function SelectionFormatToolbar({ editor }) {
 
   if (!box || !editor) return null;
 
+  const { fontFamily, fontSize } = activeEditorFont(editor);
   const attrs = editor.getAttributes('textStyle') || {};
-  const fontFamily = attrs.fontFamily || undefined;
-  const fontSize = attrs.fontSize || undefined;
   const color = attrs.color || '#000000';
 
   return createPortal(
@@ -144,10 +144,7 @@ export default function SelectionFormatToolbar({ editor }) {
           optionRender={(opt) => (
             <span style={{ fontFamily: String(opt.data?.value || '') }}>{opt.data?.label}</span>
           )}
-          onChange={(v) => {
-            if (v) editor.chain().focus().setFontFamily(v).run();
-            else editor.chain().focus().unsetFontFamily().run();
-          }}
+          onChange={(v) => applyEditorFont(editor, { fontFamily: v || null })}
         />
         <Select
           size="small"
@@ -157,7 +154,7 @@ export default function SelectionFormatToolbar({ editor }) {
           options={FONT_SIZE_OPTIONS}
           showSearch
           optionFilterProp="label"
-          onChange={(v) => editor.chain().focus().setFontSize(v).run()}
+          onChange={(v) => applyEditorFont(editor, { fontSize: v })}
         />
         <Btn title="Bold" active={editor.isActive('bold')} icon={<BoldOutlined />} onClick={() => editor.chain().focus().toggleBold().run()} />
         <Btn title="Italic" active={editor.isActive('italic')} icon={<ItalicOutlined />} onClick={() => editor.chain().focus().toggleItalic().run()} />

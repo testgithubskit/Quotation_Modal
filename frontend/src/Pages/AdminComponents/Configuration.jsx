@@ -1,18 +1,38 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Col, Form, Input, Row, Space, Spin, Typography, message } from 'antd';
+import { Button, Card, Col, Form, Input, Row, Space, Spin, Tabs, Typography, message } from 'antd';
 import { ColumnHeightOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons';
+import { useSearchParams } from 'react-router-dom';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { useAuth } from '../../config/AuthContext.jsx';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
+import Team from './Team';
+import AuditLogs from './AuditLogs';
+import Customers from './Customers';
+import {
+  getAllOrganizationBuiltinColumnsIncludingHidden,
+  getOrganizationBuiltinColumns,
+  hideOrganizationBuiltinColumn,
+  updateOrganizationBuiltinColumn,
+} from '../../utils/organizationColumns.js';
 
-export default function Configuration() {
+function OrgDetails() {
   const { refreshMe } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [fields, setFields] = useState([]);
   const [columnOpen, setColumnOpen] = useState(false);
+  const [columnRev, setColumnRev] = useState(0);
   const [form] = Form.useForm();
+
+  const builtinFields = useMemo(
+    () => getOrganizationBuiltinColumns(),
+    [columnRev],
+  );
+  const allBuiltinFields = useMemo(
+    () => getAllOrganizationBuiltinColumnsIncludingHidden(),
+    [columnRev],
+  );
 
   const customFields = useMemo(
     () => fields.filter((f) => f.entity_type === 'ORGANIZATION'),
@@ -109,18 +129,15 @@ export default function Configuration() {
   };
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       {loading ? (
-        <div className="grid h-full place-items-center">
+        <div className="grid min-h-0 flex-1 place-items-center">
           <Spin size="large" />
         </div>
       ) : (
         <>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <div>
-              <Typography.Title level={3} className="!mb-1 !font-sans !text-teal-800">
-                Configuration
-              </Typography.Title>
               <Typography.Text type="secondary">
                 Company details used on reports. Add custom columns as needed.
               </Typography.Text>
@@ -153,7 +170,8 @@ export default function Configuration() {
             </Space>
           </div>
 
-          <Card className="border-slate-200 shadow-sm">
+          <div className="admin-scroll-pane min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 bg-white shadow-sm">
+          <Card className="border-0 shadow-none">
             <Form form={form} layout="vertical" disabled={!editing}>
               <Row gutter={[24, 0]}>
                 <Col xs={24} md={12}>
@@ -172,22 +190,17 @@ export default function Configuration() {
                 <Col xs={24} md={12}>
                   <Form.Item name="phone" label="Phone"><Input size="large" /></Form.Item>
                 </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item name="website" label="Website"><Input size="large" /></Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item name="tax_number" label="Tax / GST number"><Input size="large" /></Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item name="address" label="Address">
-                    <Input.TextArea rows={3} />
-                  </Form.Item>
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item name="notes" label="Notes">
-                    <Input.TextArea rows={3} />
-                  </Form.Item>
-                </Col>
+                {builtinFields.map((f) => (
+                  <Col xs={24} md={12} key={f.field_key}>
+                    <Form.Item
+                      name={f.field_key}
+                      label={f.field_label}
+                      rules={f.is_required ? [{ required: true, message: `${f.field_label} is required` }] : undefined}
+                    >
+                      {f.field_type === 'TEXTAREA' ? <Input.TextArea rows={3} /> : <Input size="large" />}
+                    </Form.Item>
+                  </Col>
+                ))}
                 {customFields.map((f) => (
                   <Col xs={24} md={12} key={f.field_key}>
                     <Form.Item
@@ -202,6 +215,7 @@ export default function Configuration() {
               </Row>
             </Form>
           </Card>
+          </div>
         </>
       )}
 
@@ -210,7 +224,34 @@ export default function Configuration() {
         onClose={() => setColumnOpen(false)}
         entityType="ORGANIZATION"
         fields={customFields}
-        onChanged={() => load({ quiet: true })}
+        builtinFields={allBuiltinFields}
+        onUpdateBuiltin={updateOrganizationBuiltinColumn}
+        onHideBuiltin={hideOrganizationBuiltinColumn}
+        onChanged={() => {
+          setColumnRev((n) => n + 1);
+          load({ quiet: true });
+        }}
+      />
+    </div>
+  );
+}
+
+export default function Configuration() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get('tab') || 'org';
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Tabs
+        activeKey={['customers', 'org', 'user', 'audit'].includes(tab) ? tab : 'org'}
+        onChange={(key) => setSearchParams(key === 'org' ? {} : { tab: key })}
+        className="config-tabs min-h-0 flex-1"
+        items={[
+          { key: 'customers', label: 'Customers', children: <Customers /> },
+          { key: 'org', label: 'Organization Details', children: <OrgDetails /> },
+          { key: 'user', label: 'User', children: <Team /> },
+          { key: 'audit', label: 'Audit logs', children: <AuditLogs /> },
+        ]}
       />
     </div>
   );

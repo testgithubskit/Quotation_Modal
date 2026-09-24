@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Typography, Form, Row, Col, Card, Button, Space,
+  Typography, Form, Row, Col, Button, Space,
   Input, InputNumber, Select, Tooltip, message,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined, SaveOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
@@ -15,11 +15,20 @@ import {
   phoneFieldRules,
   phoneInputProps,
 } from '../../utils/phoneValidation.js';
+import QuotationPdfPreviewModal from '../../Components/QuotationPdfPreviewModal.jsx';
+import useQuotationPdfPreview from '../../hooks/useQuotationPdfPreview.js';
 
 const UNIT_OPTIONS = ['Nos', 'Set', 'Each', 'Parameter', 'Hour', 'Day'];
 const UNIT_SELECT_OPTIONS = [
   ...UNIT_OPTIONS.map((u) => ({ value: u, label: u })),
   { value: 'Other', label: 'Other' },
+];
+
+const STEPS = [
+  { title: 'Report Details' },
+  { title: 'Customer details' },
+  { title: 'Activities' },
+  { title: 'Terms & condition' },
 ];
 
 let uid = 0;
@@ -50,6 +59,10 @@ export default function GenerateReport() {
   const [items, setItems] = useState([emptyItem()]);
   const [activeKey, setActiveKey] = useState(() => items[0]?.key);
   const [saving, setSaving] = useState(false);
+  const [organization, setOrganization] = useState(null);
+  const [step, setStep] = useState(0);
+  const pendingPayloadRef = useRef(null);
+  const pdfPreview = useQuotationPdfPreview();
   const [activityNotes, setActivityNotes] = useState([
     { key: nextKey(), value: 'Quoted price are per each qty / Parameter.' },
   ]);
@@ -64,11 +77,12 @@ export default function GenerateReport() {
     let cancelled = false;
     (async () => {
       try {
-        const [c, a, t, af] = await Promise.all([
+        const [c, a, t, af, org] = await Promise.all([
           api.get('/customers').then((r) => r.data),
           api.get('/activities').then((r) => r.data),
           api.get('/quotation-templates').then((r) => r.data),
           api.get('/custom-fields', { params: { entity_type: 'ACTIVITY' } }).then((r) => r.data),
+          api.get('/organizations/me').then((r) => r.data).catch(() => null),
         ]);
         if (cancelled) return;
         setCustomers(c.items || []);
@@ -83,6 +97,7 @@ export default function GenerateReport() {
           }
         }
         setStarredTemplate(fullTpl);
+        setOrganization(org);
         setActivityCustomFields(
           (af.items || []).map((f) => ({
             key: f.field_key,
@@ -332,7 +347,114 @@ export default function GenerateReport() {
     return lines;
   };
 
-  const handleSubmit = async () => {
+  const buildSubmission = (values, validItems) => {
+    const headerData = headerValuesFromForm(values);
+    const dateIso = values.date?.toDate
+      ? values.date.toDate().toISOString()
+      : (values.date ? new Date(values.date).toISOString() : new Date().toISOString());
+
+    const placeholderFields = {};
+    templateExtraFields.forEach((f) => {
+      const val = values[f.key];
+      if (val == null || val === '') return;
+      placeholderFields[f.key] = val?.format ? val.format('DD/MM/YYYY') : val;
+    });
+
+    const customData = {
+      subject: values.subject || null,
+      header: headerData,
+      contactPerson: values.contactPerson || null,
+      companyName: values.companyName || null,
+      mobileNumber: values.mobileNumber || null,
+      emailId: values.emailId || null,
+      placeholderFields,
+      activityNotes: activityNotes.map((n) => n.value).filter(Boolean),
+      termsAndConditions: values.termsAndConditions || null,
+      activities: validItems.map((r) => ({
+        key: r.key,
+        activityId: r.activityId,
+        sampleActivity: r.sampleActivity,
+        description: r.description,
+        specification: r.specification,
+        qty: r.qty,
+        unit: r.unit,
+        unitRate: r.unitRate,
+        customFields: r.customFields || {},
+        subActivities: (r.subActivities || [])
+          .filter((s) => s.sampleActivity || s.activityId)
+          .map((s) => ({
+            key: s.key,
+            activityId: s.activityId,
+            sampleActivity: s.sampleActivity,
+            description: s.description,
+            specification: s.specification,
+            qty: s.qty,
+            unit: s.unit,
+            unitRate: s.unitRate,
+            customFields: s.customFields || {},
+          })),
+      })),
+    };
+
+    const apiItems = flattenItemsForApi(validItems).map((it) => ({
+      ...it,
+      total: Number(it.quantity || 0) * Number(it.unit_price || 0),
+    }));
+
+    const payload = {
+      customer_id: values.customerId,
+      quotation_template_id: starredTemplate.id,
+      quotation_number: headerData.reportNo || null,
+      quotation_date: dateIso,
+      notes: values.termsAndConditions || null,
+      currency: 'INR',
+      discount: 0,
+      custom_data: customData,
+      items: flattenItemsForApi(validItems),
+    };
+
+    const customer = findCustomer(values.customerId) || {
+      id: values.customerId,
+      name: values.contactPerson || values.companyName || '',
+      phone: values.mobileNumber || '',
+      email: values.emailId || '',
+      notes: values.companyName || '',
+    };
+
+    const previewCtx = {
+      report: {
+        quotation_number: headerData.reportNo || 'Preview',
+        quotation_date: dateIso,
+        notes: values.termsAndConditions || null,
+        currency: 'INR',
+        total: itemsTotals.cost,
+        custom_data: customData,
+        items: apiItems,
+      },
+      customer,
+      template: starredTemplate,
+      organization,
+    };
+
+    return { payload, previewCtx };
+  };
+
+  const submitPayload = async (payload) => {
+    setSaving(true);
+    try {
+      const created = await api.post('/quotations', payload).then((r) => r.data);
+      message.success(`Quotation ${created.quotation_number} submitted`);
+      pdfPreview.close();
+      pendingPayloadRef.current = null;
+      navigate('/user/reports');
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'Failed to submit quotation'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handlePreview = async () => {
     const values = await form.validateFields();
     const validItems = items.filter((r) => r.sampleActivity || r.activityId);
     if (validItems.length === 0) {
@@ -347,75 +469,81 @@ export default function GenerateReport() {
       message.error('No starred template. Ask an admin to star a template in Report Design.');
       return;
     }
+    const { payload, previewCtx } = buildSubmission(values, validItems);
+    pendingPayloadRef.current = payload;
+    await pdfPreview.openPreview(previewCtx);
+  };
 
-    const headerData = headerValuesFromForm(values);
-    const dateIso = values.date?.toDate
-      ? values.date.toDate().toISOString()
-      : (values.date ? new Date(values.date).toISOString() : new Date().toISOString());
-
-    const placeholderFields = {};
-    templateExtraFields.forEach((f) => {
-      const val = values[f.key];
-      if (val == null || val === '') return;
-      placeholderFields[f.key] = val?.format ? val.format('DD/MM/YYYY') : val;
-    });
-
-    setSaving(true);
-    try {
-      const payload = {
-        customer_id: values.customerId,
-        quotation_template_id: starredTemplate.id,
-        quotation_number: headerData.reportNo || null,
-        quotation_date: dateIso,
-        notes: values.termsAndConditions || null,
-        currency: 'INR',
-        discount: 0,
-        custom_data: {
-          subject: values.subject || null,
-          header: headerData,
-          contactPerson: values.contactPerson || null,
-          companyName: values.companyName || null,
-          mobileNumber: values.mobileNumber || null,
-          emailId: values.emailId || null,
-          placeholderFields,
-          activityNotes: activityNotes.map((n) => n.value).filter(Boolean),
-          termsAndConditions: values.termsAndConditions || null,
-          activities: validItems.map((r) => ({
-            key: r.key,
-            activityId: r.activityId,
-            sampleActivity: r.sampleActivity,
-            description: r.description,
-            specification: r.specification,
-            qty: r.qty,
-            unit: r.unit,
-            unitRate: r.unitRate,
-            customFields: r.customFields || {},
-            subActivities: (r.subActivities || [])
-              .filter((s) => s.sampleActivity || s.activityId)
-              .map((s) => ({
-                key: s.key,
-                activityId: s.activityId,
-                sampleActivity: s.sampleActivity,
-                description: s.description,
-                specification: s.specification,
-                qty: s.qty,
-                unit: s.unit,
-                unitRate: s.unitRate,
-                customFields: s.customFields || {},
-              })),
-          })),
-        },
-        items: flattenItemsForApi(validItems),
-      };
-
-      const created = await api.post('/quotations', payload).then((r) => r.data);
-      message.success(`Quotation ${created.quotation_number} submitted`);
-      navigate('/user/reports');
-    } catch (error) {
-      message.error(getApiErrorMessage(error, 'Failed to submit quotation'));
-    } finally {
-      setSaving(false);
+  const handleSubmitFromPreview = async () => {
+    const payload = pendingPayloadRef.current;
+    if (!payload) {
+      await handlePreview();
+      return;
     }
+    await submitPayload(payload);
+  };
+
+  const clearStep = () => {
+    if (step === 0) {
+      const extra = {};
+      templateExtraFields.forEach((f) => {
+        extra[f.key] = undefined;
+      });
+      form.setFieldsValue({
+        reportNo: undefined,
+        date: undefined,
+        subject: undefined,
+        ...extra,
+      });
+      return;
+    }
+    if (step === 1) {
+      form.setFieldsValue({
+        customerId: undefined,
+        contactPerson: undefined,
+        companyName: undefined,
+        mobileNumber: undefined,
+        emailId: undefined,
+      });
+      return;
+    }
+    if (step === 2) {
+      const fresh = emptyItem();
+      setItems([fresh]);
+      setActiveKey(fresh.key);
+      setActivityNotes([{ key: nextKey(), value: '' }]);
+      return;
+    }
+    form.setFieldsValue({ termsAndConditions: undefined });
+  };
+
+  const goNext = async () => {
+    if (step === 0) {
+      const names = [
+        'reportNo',
+        'date',
+        'subject',
+        ...templateExtraFields.filter((f) => f.required).map((f) => f.key),
+      ];
+      await form.validateFields(names);
+      setStep(1);
+      return;
+    }
+    if (step === 1) {
+      await form.validateFields(['customerId', 'mobileNumber']);
+      setStep(2);
+      return;
+    }
+    if (step === 2) {
+      const validItems = items.filter((r) => r.sampleActivity || r.activityId);
+      if (validItems.length === 0) {
+        message.error('Please add at least one item');
+        return;
+      }
+      setStep(3);
+      return;
+    }
+    handlePreview();
   };
 
   const renderCustomFieldCell = (row, field, isSub, parentKey) => {
@@ -605,39 +733,68 @@ export default function GenerateReport() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-      <div className="shrink-0">
-        <Typography.Title level={3} className="!mb-1 !font-sans !text-teal-800">
-          Generate Report
-        </Typography.Title>
-        <Typography.Text type="secondary">Fill in the quotation details below</Typography.Text>
-      </div>
+    <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <aside className="w-56 shrink-0 border-r border-slate-200 bg-slate-50">
+        {STEPS.map((item, index) => {
+          const active = step === index;
+          return (
+            <div
+              key={item.title}
+              className={[
+                'border-b border-slate-200 px-4 py-3 text-sm last:border-b-0',
+                active
+                  ? 'border-l-4 border-l-teal-600 bg-white font-semibold text-teal-800'
+                  : 'border-l-4 border-l-transparent text-slate-600',
+              ].join(' ')}
+            >
+              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Step {index + 1}
+              </span>
+              {item.title}
+            </div>
+          );
+        })}
+      </aside>
 
-      <Card
-        className="generate-report-card min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
-        styles={{ body: { paddingBottom: 32 } }}
-      >
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="border-b border-slate-200 px-6 py-4">
+          <Typography.Title level={5} className="!mb-0 !text-sm !font-semibold !uppercase !tracking-wide !text-slate-700">
+            {STEPS[step].title}
+          </Typography.Title>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
         <Form form={form} layout="vertical" initialValues={{ date: dayjs() }}>
-          <div className="mb-2">
-            <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
-              Report Details
-            </Typography.Title>
-          </div>
+          <div className={step === 0 ? 'block' : 'hidden'}>
           <Row gutter={16}>
             {headerFields.map((field) => (
-              <Col xs={24} sm={12} md={6} key={field.key}>
+              <Col xs={24} sm={12} key={field.key}>
                 <DynamicFormField field={field} />
               </Col>
             ))}
           </Row>
 
-          <div className="mt-4">
-            <Typography.Title level={5} className="!mb-0 !border-b !border-slate-200 !pb-2 !text-[15px] !font-semibold !text-slate-800">
-              Customer Information
-            </Typography.Title>
+          <Form.Item
+            name="subject"
+            label="Subject"
+            rules={[{ required: true, message: 'Enter subject' }]}
+          >
+            <Input placeholder="e.g. Quotation for the Calibration charges of Slip Gauges, Angle Gauges" />
+          </Form.Item>
+
+          {templateExtraFields.length > 0 ? (
+            <Row gutter={16}>
+              {templateExtraFields.map((field) => (
+                <Col xs={24} sm={12} key={field.key}>
+                  <DynamicFormField field={field} />
+                </Col>
+              ))}
+            </Row>
+          ) : null}
           </div>
 
-          <Row gutter={16} className="mt-2">
+          <div className={step === 1 ? 'block' : 'hidden'}>
+          <Row gutter={16}>
             <Col xs={24} sm={12} md={6}>
               <Form.Item
                 name="customerId"
@@ -691,42 +848,16 @@ export default function GenerateReport() {
               </Form.Item>
             </Col>
           </Row>
+          </div>
 
-          <Form.Item
-            name="subject"
-            label="Subject"
-            rules={[{ required: true, message: 'Enter subject' }]}
-          >
-            <Input placeholder="e.g. Quotation for the Calibration charges of Slip Gauges, Angle Gauges" />
-          </Form.Item>
-
-          {templateExtraFields.length > 0 ? (
-            <>
-              <div className="mb-2 mt-2">
-                <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
-                  Template fields
-                </Typography.Title>
-                <Typography.Text type="secondary" className="text-xs">
-                  Extra placeholders from the starred template
-                </Typography.Text>
-              </div>
-              <Row gutter={16}>
-                {templateExtraFields.map((field) => (
-                  <Col xs={24} sm={12} md={6} key={field.key}>
-                    <DynamicFormField field={field} />
-                  </Col>
-                ))}
-              </Row>
-            </>
-          ) : null}
-
+          <div className={step === 2 ? 'block' : 'hidden'}>
           <div className="mb-3 flex items-center justify-between">
             <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
               Items/Activities
             </Typography.Title>
             <Space>
               <Button icon={<PlusOutlined />} onClick={addSubActivity}>Add Sub Activity</Button>
-              <Button type="primary" icon={<PlusOutlined />} onClick={addItem}>Add Item</Button>
+              <Button type="primary" icon={<PlusOutlined />} onClick={addItem}>Add Activity</Button>
             </Space>
           </div>
 
@@ -799,25 +930,49 @@ export default function GenerateReport() {
               )}
             </div>
           ))}
-
-          <div className="mb-3 mt-6">
-            <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
-              Terms &amp; Conditions
-            </Typography.Title>
           </div>
 
+          <div className={step === 3 ? 'block' : 'hidden'}>
           <Form.Item name="termsAndConditions" label="Terms and Conditions">
-            <Input.TextArea rows={3} placeholder="Enter terms and conditions" />
+            <Input.TextArea rows={6} placeholder="Enter terms and conditions" />
           </Form.Item>
-
-          <div className="mt-2 flex gap-3">
-            <Button type="primary" size="large" icon={<SaveOutlined />} loading={saving} onClick={handleSubmit}>
-              Submit Quotation
-            </Button>
-            <Button size="large" onClick={() => navigate('/user/reports')}>Cancel</Button>
           </div>
         </Form>
-      </Card>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
+          <div>
+            {step > 0 ? (
+              <Button size="large" onClick={() => setStep((s) => s - 1)}>
+                Back
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex gap-3">
+            <Button size="large" onClick={clearStep}>Clear</Button>
+            <Button
+              type="primary"
+              size="large"
+              loading={step === STEPS.length - 1 ? pdfPreview.loading : false}
+              onClick={goNext}
+            >
+              {step === STEPS.length - 1 ? 'Preview' : 'Next'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <QuotationPdfPreviewModal
+        open={pdfPreview.open}
+        title={pdfPreview.ctx?.report?.quotation_number || 'Report preview'}
+        loading={pdfPreview.loading}
+        pdfUrl={pdfPreview.pdfUrl}
+        onClose={pdfPreview.close}
+        onEdit={pdfPreview.close}
+        onSubmit={handleSubmitFromPreview}
+        submitLoading={saving}
+        submitLabel="Submit"
+      />
     </div>
   );
 }

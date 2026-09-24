@@ -101,7 +101,7 @@ export default function Login() {
               Use your work email to continue.
             </Typography.Text>
 
-            <Form form={loginForm} layout="vertical" onFinish={onLogin} requiredMark="optional">
+            <Form form={loginForm} layout="vertical" onFinish={onLogin} requiredMark="optional" autoComplete="off">
               <Form.Item
                 name="email"
                 label="Email"
@@ -110,7 +110,7 @@ export default function Login() {
                   { type: 'email', message: 'Enter a valid email' },
                 ]}
               >
-                <Input size="large" placeholder="admin@company.com" autoComplete="email" className="!rounded-lg" />
+                <Input size="large" placeholder="admin@company.com" autoComplete="off" className="!rounded-lg" />
               </Form.Item>
               <Form.Item
                 name="password"
@@ -120,7 +120,8 @@ export default function Login() {
                 <Input.Password
                   size="large"
                   placeholder="Password"
-                  autoComplete="current-password"
+                  autoComplete="off"
+                  name="login-password"
                   className="!rounded-lg"
                 />
               </Form.Item>
@@ -176,7 +177,7 @@ export default function Login() {
               ]}
             />
 
-            <Form form={signupForm} layout="vertical" requiredMark="optional">
+            <Form form={signupForm} layout="vertical" requiredMark="optional" autoComplete="off">
               <div className={signupStep === 0 ? 'block' : 'hidden'}>
                 <Form.Item
                   name="organization_name"
@@ -228,7 +229,7 @@ export default function Login() {
                     { type: 'email', message: 'Valid email required' },
                   ]}
                 >
-                  <Input size="large" placeholder="admin@company.com" autoComplete="email" className="!rounded-lg" />
+                  <Input size="large" placeholder="admin@company.com" autoComplete="off" className="!rounded-lg" />
                 </Form.Item>
                 <Form.Item
                   name="phone"
@@ -243,7 +244,7 @@ export default function Login() {
                   label="Password"
                   rules={[{ required: true, message: 'Required' }, { min: 8, message: 'Min 8 characters' }]}
                 >
-                  <Input.Password size="large" autoComplete="new-password" className="!rounded-lg" />
+                  <Input.Password size="large" autoComplete="off" className="!rounded-lg" />
                 </Form.Item>
                 <Form.Item
                   name="confirm"
@@ -259,7 +260,7 @@ export default function Login() {
                     }),
                   ]}
                 >
-                  <Input.Password size="large" autoComplete="new-password" className="!rounded-lg" />
+                  <Input.Password size="large" autoComplete="off" className="!rounded-lg" />
                 </Form.Item>
                 <div className="flex gap-2">
                   <Button

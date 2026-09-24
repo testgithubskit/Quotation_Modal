@@ -241,9 +241,6 @@ function TemplateList({ onDesign, onCreate }) {
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
-          <Typography.Title level={4} className="!mb-1 !font-sans !text-teal-800">
-            Design template
-          </Typography.Title>
           <p className="m-0 text-sm text-slate-500">
             Create and manage report templates. Star one template — users generate reports with that template only.
           </p>

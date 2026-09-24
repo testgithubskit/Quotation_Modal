@@ -13,7 +13,9 @@ import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
 import BulkUploadModal from '../../Components/BulkUploadModal';
 import BulkReviewModal from '../../Components/BulkReviewModal';
-import { slugCode, slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
+import {
+  configTableScroll, slugCode, slNoColumn, recordMatchesSearch,
+} from '../../utils/tableHelpers';
 import { datedFilename, downloadReportExcel, downloadReportPdf } from '../../utils/spreadsheet';
 import {
   digitsOnlyPhone,
@@ -434,7 +436,7 @@ export default function Customers() {
           loading={loading}
           columns={columns}
           dataSource={paged}
-          scroll={{ x: 'max-content', y: 'calc(100vh - 300px)' }}
+          scroll={configTableScroll}
           pagination={{
             current: page,
             pageSize,

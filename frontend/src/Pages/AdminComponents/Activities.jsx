@@ -13,7 +13,7 @@ import TableToolbar from '../../Components/TableToolbar';
 import ManageColumnsModal from '../../Components/ManageColumnsModal';
 import BulkUploadModal from '../../Components/BulkUploadModal';
 import BulkReviewModal from '../../Components/BulkReviewModal';
-import { slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
+import { activitiesTableScroll, slNoColumn, recordMatchesSearch } from '../../utils/tableHelpers';
 import { datedFilename, downloadReportExcel, downloadReportPdf } from '../../utils/spreadsheet';
 import {
   getActivityBuiltinColumns,
@@ -442,7 +442,7 @@ export default function Activities() {
           loading={loading}
           columns={columns}
           dataSource={paged}
-          scroll={{ x: 'max-content', y: 'calc(100vh - 300px)' }}
+          scroll={activitiesTableScroll}
           pagination={{
             current: page,
             pageSize,

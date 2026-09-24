@@ -118,7 +118,7 @@ class UserService:
             action=AuditAction.CREATE,
             entity_type="User",
             entity_id=user.id,
-            new_data={"email": user.email, "role": payload.role_name},
+            new_data={"email": user.email, "full_name": user.full_name, "role": payload.role_name},
         )
         db.commit()
         db.refresh(user)
@@ -153,6 +153,7 @@ class UserService:
             action=AuditAction.UPDATE,
             entity_type="User",
             entity_id=user.id,
+            new_data={"email": user.email, "full_name": user.full_name},
         )
         db.commit()
         return self.get(db, current_user, user.id)

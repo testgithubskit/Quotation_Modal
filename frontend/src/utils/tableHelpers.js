@@ -28,6 +28,18 @@ export function slugCode(text, fallback = 'ITEM') {
   return base || fallback;
 }
 
+/** Standalone admin pages (e.g. Activities) — navbar, toolbar, pagination, footer. */
+export const activitiesTableScroll = {
+  x: 'max-content',
+  y: 'calc(100vh - 300px)',
+};
+
+/** Configuration tabs — extra tab bar above the table; leave room for pagination. */
+export const configTableScroll = {
+  x: 'max-content',
+  y: 'calc(100vh - 380px)',
+};
+
 /** Serial number column for paginated Ant Design tables */
 export function slNoColumn(page = 1, pageSize = 20) {
   return {

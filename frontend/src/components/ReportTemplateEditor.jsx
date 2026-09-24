@@ -28,6 +28,7 @@ import {
   FilePdfOutlined, FileExcelOutlined, CloseOutlined,
 } from '@ant-design/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { CellSelection, selectionCell } from '@tiptap/pm/tables';
 import { api, getApiErrorMessage } from '../config/auth.js';
 import {
@@ -43,7 +44,7 @@ import { preserveBlankParagraphs } from '../utils/renderQuotationReport.js';
 import { ResizableImage } from './tiptap/ResizableImage.jsx';
 import TableGripControls from './tiptap/TableGripControls.jsx';
 import SelectionFormatToolbar from './tiptap/SelectionFormatToolbar.jsx';
-import { ReportPlaceholder, hydratePlaceholderChips } from './tiptap/ReportPlaceholder.js';
+import { ReportPlaceholder, hydratePlaceholderChips, activeEditorFont, applyEditorFont } from './tiptap/ReportPlaceholder.js';
 
 const FontSize = Extension.create({
   name: 'fontSize',
@@ -229,6 +230,7 @@ function ToolBtn({ title, active, danger, onClick, icon, disabled }) {
 }
 
 function SectionEditor({ label, editor, active, onFocus, className = '', pinned }) {
+  const [hover, setHover] = useState(false);
   return (
     <div
       className={[
@@ -238,11 +240,19 @@ function SectionEditor({ label, editor, active, onFocus, className = '', pinned 
         className,
       ].filter(Boolean).join(' ')}
       onMouseDown={onFocus}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      <div className="pointer-events-none absolute left-2 top-1 z-10 rounded bg-teal-700/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
+      <motion.div
+        className="pointer-events-none absolute top-1 z-20 whitespace-nowrap rounded bg-teal-700/90 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm"
+        style={{ right: '100%', marginRight: 10 }}
+        initial={false}
+        animate={{ opacity: hover ? 1 : 0, x: hover ? 0 : 8 }}
+        transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+      >
         {label}
-      </div>
-      <EditorContent editor={editor} className="tiptap-editor min-h-[72px] px-1 pt-8" />
+      </motion.div>
+      <EditorContent editor={editor} className="tiptap-editor min-h-[72px] px-1" />
     </div>
   );
 }
@@ -297,7 +307,7 @@ function DesignerSidebar({
   const inTable = Boolean(editor?.isActive('table'));
   // Re-read mark attrs whenever the editor selection/content updates
   void selectionTick;
-  const textStyle = editor?.getAttributes('textStyle') || {};
+  const textStyle = activeEditorFont(editor);
   const highlightColor = editor?.getAttributes('highlight')?.color || '#fef08a';
   const cellAttrs = {
     ...(editor?.getAttributes('tableHeader') || {}),
@@ -391,7 +401,7 @@ function DesignerSidebar({
   };
 
   return (
-    <aside className="designer-sidebar flex w-[300px] shrink-0 flex-col overflow-auto border-r border-slate-200 bg-white text-slate-800">
+    <aside className="designer-sidebar flex w-[420px] shrink-0 flex-col overflow-auto border-r border-slate-200 bg-white text-slate-800">
       <Collapse
         ghost
         defaultActiveKey={['ph', 'page', 'logo', 'type', 'table']}
@@ -610,8 +620,8 @@ function DesignerSidebar({
                       placeholder="Font"
                       value={textStyle.fontFamily || undefined}
                       onChange={(v) => {
-                        if (!v || !editor) return;
-                        editor.chain().focus().setFontFamily(v).run();
+                        if (!v) return;
+                        applyEditorFont(editor, { fontFamily: v });
                       }}
                     />
                   </div>
@@ -625,8 +635,8 @@ function DesignerSidebar({
                       value={textStyle.fontSize || undefined}
                       options={FONT_SIZE_OPTIONS}
                       onChange={(v) => {
-                        if (!v || !editor) return;
-                        editor.chain().focus().setFontSize(v).run();
+                        if (!v) return;
+                        applyEditorFont(editor, { fontSize: v });
                       }}
                     />
                   </div>
@@ -950,12 +960,18 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
       .replace(/^\{\{|\}\}$/g, '')
       .trim();
     if (!key || !currentEditor) return;
+    const style = currentEditor.getAttributes('textStyle') || {};
     currentEditor
       .chain()
       .focus()
       .insertContent({
         type: 'reportPlaceholder',
-        attrs: { key, label: ph.label || key },
+        attrs: {
+          key,
+          label: ph.label || key,
+          fontFamily: style.fontFamily || null,
+          fontSize: style.fontSize || null,
+        },
       })
       .run();
   };
@@ -1307,7 +1323,7 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
           selectionTick={selectionTick}
         />
 
-        <div className="min-h-0 flex-1 overflow-auto p-6">
+        <div className="min-h-0 flex-1 overflow-auto py-6 pl-24 pr-6">
           <div className="mx-auto flex justify-center" style={{ minWidth: pagePx.width * zoom + 48 }}>
             <div
               className="origin-top bg-white shadow-xl"
@@ -1326,7 +1342,7 @@ export default function ReportTemplateEditor({ templateId = null, onBack, onSave
             >
               <SectionEditor label="Header" editor={headerEditor} active={activeSection === 'header'} onFocus={() => setActiveSection('header')} />
               <div
-                className="min-h-0 flex-1 overflow-auto"
+                className="min-h-0 flex-1 overflow-visible"
                 style={{ marginTop: `${pageSettings.headerSpacing}mm`, marginBottom: `${pageSettings.footerSpacing}mm` }}
               >
                 <SectionEditor label="Body" editor={bodyEditor} active={activeSection === 'body'} onFocus={() => setActiveSection('body')} />

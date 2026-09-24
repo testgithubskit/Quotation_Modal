@@ -14,4 +14,6 @@ class AuditLogResponse(ORMModel):
     entity_id: Optional[str]
     old_data: Optional[dict]
     new_data: Optional[dict]
+    actor_name: Optional[str] = None
+    actor_email: Optional[str] = None
     created_at: datetime

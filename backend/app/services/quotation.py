@@ -388,6 +388,7 @@ class QuotationTemplateService:
             action=AuditAction.UPDATE,
             entity_type="QuotationTemplate",
             entity_id=template.id,
+            new_data={"name": template.name},
         )
         db.commit()
         db.refresh(template)
