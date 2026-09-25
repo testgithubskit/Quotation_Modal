@@ -35,6 +35,8 @@ PERMISSIONS: list[tuple[str, str, str]] = [
     ("custom_fields:update", "Update custom fields", "Update custom field definitions"),
     ("custom_fields:delete", "Delete custom fields", "Delete custom field definitions"),
     ("audit_logs:read", "Read audit logs", "View audit logs"),
+    ("notifications:read", "Read notifications", "View notifications"),
+    ("notifications:update", "Update notifications", "Acknowledge notifications"),
 ]
 
 ROLE_PERMISSIONS: dict[str, set[str] | None] = {
@@ -46,7 +48,8 @@ ROLE_PERMISSIONS: dict[str, set[str] | None] = {
         "quotations:create",
         "quotations:read",
         "quotations:update",
-        "quotations:delete",
+        "notifications:read",
+        "notifications:update",
         "quotation_templates:create",
         "quotation_templates:read",
         "quotation_templates:update",

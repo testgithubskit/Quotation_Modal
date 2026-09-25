@@ -18,6 +18,7 @@ import { datedFilename, downloadReportExcel, downloadReportPdf } from '../../uti
 import {
   getActivityBuiltinColumns,
   getAllActivityBuiltinColumnsIncludingHidden,
+  getActivityBuiltinImportLabels,
   readActivityBuiltinValue,
 } from '../../utils/activityColumns.js';
 
@@ -38,6 +39,7 @@ export default function Activities() {
   const [previewRows, setPreviewRows] = useState([]);
   const [previewColumns, setPreviewColumns] = useState([]);
   const [importing, setImporting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [form] = Form.useForm();
@@ -210,11 +212,27 @@ export default function Activities() {
     }
   };
 
+  const deleteAll = async () => {
+    setDeletingAll(true);
+    try {
+      const { data } = await api.delete('/activities/all');
+      message.success(data?.message || 'All activities deleted');
+      cancelEdit();
+      setPage(1);
+      await load();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'Delete all failed'));
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   const onBulkUpload = async (file) => {
     setImporting(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('column_labels', JSON.stringify(getActivityBuiltinImportLabels()));
       const { data } = await api.post('/activities/import/preview', formData);
       setPreviewColumns(data?.columns || []);
       setPreviewRows(data?.rows || []);
@@ -247,7 +265,7 @@ export default function Activities() {
   };
 
   const toExportRows = (items) => items.map((r) => {
-    const row = { 'Activity Code': r.code };
+    const row = {};
     builtinFields.forEach((col) => {
       row[col.field_label] = readActivityBuiltinValue(r, col.field_key) ?? '';
     });
@@ -260,6 +278,14 @@ export default function Activities() {
   const renderBuiltinCell = (col, record) => {
     const raw = readActivityBuiltinValue(record, col.field_key);
     if (editingId === record.id) {
+      if (col.field_key === 'code') {
+        return (
+          <Input
+            value={draft.code ?? ''}
+            onChange={(e) => setField('code', e.target.value)}
+          />
+        );
+      }
       if (col.field_key === 'unit_price') {
         return (
           <InputNumber
@@ -285,48 +311,23 @@ export default function Activities() {
 
   const columns = [
     slNoColumn(page, pageSize),
-    {
-      title: (
-        <span>
-          Activity Code
-          <span className="text-red-500"> *</span>
-        </span>
-      ),
-      dataIndex: 'code',
-      fixed: 'left',
-      sorter: (a, b) => String(a.code || '').localeCompare(String(b.code || '')),
-      render: (v, record) => (
-        editingId === record.id
-          ? <Input value={draft.code} onChange={(e) => setField('code', e.target.value)} />
-          : v
-      ),
-    },
     ...builtinFields.map((col) => ({
-      title: (
-        <span>
-          {col.field_label}
-          {col.is_required ? <span className="text-red-500"> *</span> : null}
-        </span>
-      ),
+      title: col.field_label,
       key: col.field_key,
+      ...(col.field_key === 'code' ? { fixed: 'left' } : {}),
       sorter: (a, b) => {
         const av = col.field_key === 'unit_price'
           ? Number(a.unit_price || 0)
-          : String(a[col.field_key] ?? '');
+          : String(readActivityBuiltinValue(a, col.field_key) ?? '');
         const bv = col.field_key === 'unit_price'
           ? Number(b.unit_price || 0)
-          : String(b[col.field_key] ?? '');
+          : String(readActivityBuiltinValue(b, col.field_key) ?? '');
         return typeof av === 'number' ? av - bv : av.localeCompare(bv);
       },
       render: (_, record) => renderBuiltinCell(col, record),
     })),
     ...customFields.map((f) => ({
-      title: (
-        <span>
-          {f.field_label}
-          {f.is_required ? <span className="text-red-500"> *</span> : null}
-        </span>
-      ),
+      title: f.field_label,
       key: f.field_key,
       sorter: (a, b) => String(a.custom_data?.[f.field_key] ?? '')
         .localeCompare(String(b.custom_data?.[f.field_key] ?? '')),
@@ -390,6 +391,18 @@ export default function Activities() {
             >
               Bulk upload
             </Button>
+            <Popconfirm
+              title="Delete all activities?"
+              description="This removes every activity in your organization."
+              okText="Delete all"
+              okButtonProps={{ danger: true }}
+              onConfirm={deleteAll}
+              disabled={!allRows.length}
+            >
+              <Button danger icon={<DeleteOutlined />} loading={deletingAll} disabled={!allRows.length}>
+                Delete all
+              </Button>
+            </Popconfirm>
             <Dropdown
               menu={{
                 items: [
@@ -473,7 +486,7 @@ export default function Activities() {
           <Form.Item name="code" label="Activity Code" rules={[{ required: true, message: 'Required' }]}>
             <Input placeholder="e.g. ACT-001" />
           </Form.Item>
-          {builtinFields.map((col) => (
+          {builtinFields.filter((col) => col.field_key !== 'code').map((col) => (
             <Form.Item
               key={col.field_key}
               name={col.field_key}
@@ -533,20 +546,13 @@ export default function Activities() {
             {' '}
             file. Only columns already defined in the app are extracted
             (
-            <strong>Activity Code</strong>
-            ,
-            {' '}
-            <strong>Name / Specification</strong>
-            ,
-            {' '}
-            <strong>Description / Particulars</strong>
-            ,
-            {' '}
-            <strong>Unit</strong>
-            ,
-            {' '}
-            <strong>Cost</strong>
-            , plus any custom columns you added). Extra spreadsheet columns are ignored. You will review a preview before import.
+            {getAllActivityBuiltinColumnsIncludingHidden().map((col, i, arr) => (
+              <span key={col.field_key}>
+                <strong>{col.field_label}</strong>
+                {i < arr.length - 1 ? ', ' : ''}
+              </span>
+            ))}
+            , plus any custom columns you added). Standard names like Activity Code and code still work. Extra spreadsheet columns are ignored. You will review a preview before import.
           </>
         )}
       />

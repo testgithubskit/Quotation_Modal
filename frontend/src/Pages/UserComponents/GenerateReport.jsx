@@ -4,7 +4,8 @@ import {
   Input, InputNumber, Select, Tooltip, message,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { templateForQuotation } from '../../utils/templateSnapshot.js';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { DynamicFormField } from '../../Components/DynamicFormField';
@@ -24,11 +25,9 @@ const UNIT_SELECT_OPTIONS = [
   { value: 'Other', label: 'Other' },
 ];
 
-const STEPS = [
-  { title: 'Report Details' },
-  { title: 'Customer details' },
-  { title: 'Activities' },
-  { title: 'Terms & condition' },
+const BASE_STEPS = [
+  { title: 'Report and Customer details' },
+  { title: 'Activity' },
 ];
 
 let uid = 0;
@@ -51,6 +50,9 @@ function emptyItem() {
 
 export default function GenerateReport() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editQuotationId = searchParams.get('edit');
+  const [editingQuotationId, setEditingQuotationId] = useState(null);
   const [form] = Form.useForm();
   const [customers, setCustomers] = useState([]);
   const [activities, setActivities] = useState([]);
@@ -72,6 +74,10 @@ export default function GenerateReport() {
     () => resolveTemplateExtraFields(starredTemplate),
     [starredTemplate],
   );
+  const steps = useMemo(() => {
+    if (!templateExtraFields.length) return BASE_STEPS;
+    return [...BASE_STEPS, { title: 'Additional details' }];
+  }, [templateExtraFields.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -98,6 +104,65 @@ export default function GenerateReport() {
         }
         setStarredTemplate(fullTpl);
         setOrganization(org);
+
+        if (editQuotationId) {
+          const q = await api.get(`/quotations/${editQuotationId}`).then((r) => r.data);
+          if (q.status !== 'REJECTED') {
+            message.error('Only rejected reports can be revised');
+            navigate('/user/reports');
+            return;
+          }
+          if (q.custom_data?._superseded_by) {
+            message.error('This rejection already has a newer submission');
+            navigate('/user/reports');
+            return;
+          }
+          const cd = q.custom_data || {};
+          const hdr = cd.header || {};
+          form.setFieldsValue({
+            customerId: q.customer_id,
+            reportNo: hdr.reportNo || q.quotation_number,
+            date: q.quotation_date ? dayjs(q.quotation_date) : dayjs(),
+            subject: cd.subject,
+            contactPerson: cd.contactPerson,
+            companyName: cd.companyName,
+            mobileNumber: cd.mobileNumber,
+            emailId: cd.emailId,
+            termsAndConditions: cd.termsAndConditions || q.notes,
+            ...(cd.placeholderFields || {}),
+          });
+          const acts = cd.activities || [];
+          if (acts.length) {
+            setItems(acts.map((a) => ({
+              key: a.key || nextKey(),
+              activityId: a.activityId || null,
+              sampleActivity: a.sampleActivity || '',
+              description: a.description || '',
+              specification: a.specification || '',
+              qty: a.qty ?? 0,
+              unit: a.unit || 'Nos',
+              unitRate: a.unitRate ?? 0,
+              customFields: a.customFields || {},
+              subActivities: (a.subActivities || []).map((s) => ({
+                key: s.key || nextKey(),
+                activityId: s.activityId || null,
+                sampleActivity: s.sampleActivity || '',
+                description: s.description || '',
+                specification: s.specification || '',
+                qty: s.qty ?? 0,
+                unit: s.unit || 'Nos',
+                unitRate: s.unitRate ?? 0,
+                customFields: s.customFields || {},
+              })),
+            })));
+          }
+          if (cd.activityNotes?.length) {
+            setActivityNotes(cd.activityNotes.map((value) => ({ key: nextKey(), value })));
+          }
+          setEditingQuotationId(editQuotationId);
+          const snapTpl = templateForQuotation(q, fullTpl);
+          setStarredTemplate(snapTpl);
+        }
         setActivityCustomFields(
           (af.items || []).map((f) => ({
             key: f.field_key,
@@ -109,9 +174,9 @@ export default function GenerateReport() {
             required: Boolean(f.is_required),
           })),
         );
-        form.setFieldsValue({
-          date: dayjs(),
-        });
+        if (!editQuotationId) {
+          form.setFieldsValue({ date: dayjs() });
+        }
         if (!fullTpl) {
           message.warning('No starred template set. Ask an admin to star a template in Report Design.');
         }
@@ -123,7 +188,7 @@ export default function GenerateReport() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [editQuotationId]);
 
   const activityOptions = useMemo(
     () => activities.map((a) => ({
@@ -432,7 +497,7 @@ export default function GenerateReport() {
         items: apiItems,
       },
       customer,
-      template: starredTemplate,
+      template: templateForQuotation({ custom_data: customData }, starredTemplate),
       organization,
     };
 
@@ -442,10 +507,16 @@ export default function GenerateReport() {
   const submitPayload = async (payload) => {
     setSaving(true);
     try {
-      const created = await api.post('/quotations', payload).then((r) => r.data);
-      message.success(`Quotation ${created.quotation_number} submitted`);
+      if (editingQuotationId) {
+        const created = await api.post(`/quotations/${editingQuotationId}/resubmit`, payload).then((r) => r.data);
+        message.success(`Report revised and resubmitted (${created.quotation_number})`);
+      } else {
+        const created = await api.post('/quotations', payload).then((r) => r.data);
+        message.success(`Quotation ${created.quotation_number} submitted`);
+      }
       pdfPreview.close();
       pendingPayloadRef.current = null;
+      setEditingQuotationId(null);
       navigate('/user/reports');
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to submit quotation'));
@@ -485,20 +556,10 @@ export default function GenerateReport() {
 
   const clearStep = () => {
     if (step === 0) {
-      const extra = {};
-      templateExtraFields.forEach((f) => {
-        extra[f.key] = undefined;
-      });
       form.setFieldsValue({
         reportNo: undefined,
         date: undefined,
         subject: undefined,
-        ...extra,
-      });
-      return;
-    }
-    if (step === 1) {
-      form.setFieldsValue({
         customerId: undefined,
         contactPerson: undefined,
         companyName: undefined,
@@ -507,42 +568,42 @@ export default function GenerateReport() {
       });
       return;
     }
-    if (step === 2) {
+    if (step === 1) {
       const fresh = emptyItem();
       setItems([fresh]);
       setActiveKey(fresh.key);
       setActivityNotes([{ key: nextKey(), value: '' }]);
+      form.setFieldsValue({ termsAndConditions: undefined });
       return;
     }
-    form.setFieldsValue({ termsAndConditions: undefined });
+    const extra = {};
+    templateExtraFields.forEach((f) => {
+      extra[f.key] = undefined;
+    });
+    form.setFieldsValue(extra);
   };
 
   const goNext = async () => {
     if (step === 0) {
-      const names = [
-        'reportNo',
-        'date',
-        'subject',
-        ...templateExtraFields.filter((f) => f.required).map((f) => f.key),
-      ];
-      await form.validateFields(names);
+      await form.validateFields(['reportNo', 'date', 'subject', 'customerId', 'mobileNumber']);
       setStep(1);
       return;
     }
     if (step === 1) {
-      await form.validateFields(['customerId', 'mobileNumber']);
-      setStep(2);
-      return;
-    }
-    if (step === 2) {
       const validItems = items.filter((r) => r.sampleActivity || r.activityId);
       if (validItems.length === 0) {
         message.error('Please add at least one item');
         return;
       }
-      setStep(3);
+      if (templateExtraFields.length) {
+        setStep(2);
+        return;
+      }
+      handlePreview();
       return;
     }
+    const extraNames = templateExtraFields.filter((f) => f.required).map((f) => f.key);
+    if (extraNames.length) await form.validateFields(extraNames);
     handlePreview();
   };
 
@@ -735,7 +796,7 @@ export default function GenerateReport() {
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <aside className="w-56 shrink-0 border-r border-slate-200 bg-slate-50">
-        {STEPS.map((item, index) => {
+        {steps.map((item, index) => {
           const active = step === index;
           return (
             <div
@@ -759,7 +820,7 @@ export default function GenerateReport() {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="border-b border-slate-200 px-6 py-4">
           <Typography.Title level={5} className="!mb-0 !text-sm !font-semibold !uppercase !tracking-wide !text-slate-700">
-            {STEPS[step].title}
+            {steps[step]?.title}
           </Typography.Title>
         </div>
 
@@ -782,18 +843,6 @@ export default function GenerateReport() {
             <Input placeholder="e.g. Quotation for the Calibration charges of Slip Gauges, Angle Gauges" />
           </Form.Item>
 
-          {templateExtraFields.length > 0 ? (
-            <Row gutter={16}>
-              {templateExtraFields.map((field) => (
-                <Col xs={24} sm={12} key={field.key}>
-                  <DynamicFormField field={field} />
-                </Col>
-              ))}
-            </Row>
-          ) : null}
-          </div>
-
-          <div className={step === 1 ? 'block' : 'hidden'}>
           <Row gutter={16}>
             <Col xs={24} sm={12} md={6}>
               <Form.Item
@@ -850,7 +899,7 @@ export default function GenerateReport() {
           </Row>
           </div>
 
-          <div className={step === 2 ? 'block' : 'hidden'}>
+          <div className={step === 1 ? 'block' : 'hidden'}>
           <div className="mb-3 flex items-center justify-between">
             <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
               Items/Activities
@@ -930,13 +979,23 @@ export default function GenerateReport() {
               )}
             </div>
           ))}
-          </div>
 
-          <div className={step === 3 ? 'block' : 'hidden'}>
-          <Form.Item name="termsAndConditions" label="Terms and Conditions">
+          <Form.Item name="termsAndConditions" label="Terms and Conditions" className="!mt-6">
             <Input.TextArea rows={6} placeholder="Enter terms and conditions" />
           </Form.Item>
           </div>
+
+          {templateExtraFields.length > 0 ? (
+            <div className={step === 2 ? 'block' : 'hidden'}>
+              <Row gutter={16}>
+                {templateExtraFields.map((field) => (
+                  <Col xs={24} sm={12} key={field.key}>
+                    <DynamicFormField field={field} />
+                  </Col>
+                ))}
+              </Row>
+            </div>
+          ) : null}
         </Form>
         </div>
 
@@ -953,10 +1012,10 @@ export default function GenerateReport() {
             <Button
               type="primary"
               size="large"
-              loading={step === STEPS.length - 1 ? pdfPreview.loading : false}
+              loading={step === steps.length - 1 ? pdfPreview.loading : false}
               onClick={goNext}
             >
-              {step === STEPS.length - 1 ? 'Preview' : 'Next'}
+              {step === steps.length - 1 ? 'Preview' : 'Next'}
             </Button>
           </div>
         </div>

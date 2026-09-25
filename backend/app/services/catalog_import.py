@@ -64,6 +64,52 @@ CUSTOMER_EMAIL_ALIASES = ("email", "Email")
 CUSTOMER_PHONE_ALIASES = ("phone", "Phone", "Mobile", "mobile")
 CUSTOMER_ADDRESS_ALIASES = ("address", "Address")
 
+_BUILTIN_ALIAS_DEFAULTS: dict[str, tuple[str, ...]] = {
+    "code": ACTIVITY_CODE_ALIASES,
+    "name": ACTIVITY_NAME_ALIASES,
+    "description": ACTIVITY_DESC_ALIASES,
+    "unit": ACTIVITY_UNIT_ALIASES,
+    "unit_price": ACTIVITY_PRICE_ALIASES,
+}
+
+def _aliases_for_builtin(
+    field_key: str,
+    column_labels: dict[str, str] | None,
+) -> tuple[str, ...]:
+    default = _BUILTIN_ALIAS_DEFAULTS.get(field_key, ())
+    if not column_labels:
+        return default
+    label = _str(column_labels.get(field_key))
+    if not label:
+        return default
+    seen: set[str] = set()
+    merged: list[str] = []
+    for key in (label, field_key, *default):
+        text = _str(key)
+        if not text:
+            continue
+        low = text.lower()
+        if low in seen:
+            continue
+        seen.add(low)
+        merged.append(text)
+    return tuple(merged)
+
+
+def _activity_code_header_skip_tokens(column_labels: dict[str, str] | None) -> set[str]:
+    tokens = {
+        "sl no",
+        "s.no",
+        "sno",
+        "code",
+        "activity code",
+    }
+    if column_labels:
+        label = _str(column_labels.get("code")).lower()
+        if label:
+            tokens.add(label)
+    return tokens
+
 
 def _to_decimal(value: Any) -> Decimal:
     if value is None or value == "":
@@ -153,24 +199,32 @@ class CatalogImportService:
         current_user: User,
         file_bytes: bytes,
         filename: str,
+        column_labels: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         raw_rows = parse_spreadsheet_bytes(file_bytes, filename)
         fields = custom_field_crud.list_for_entity(
             db, current_user.organization_id, CustomFieldEntity.ACTIVITY
         )
+        code_aliases = _aliases_for_builtin("code", column_labels)
+        name_aliases = _aliases_for_builtin("name", column_labels)
+        desc_aliases = _aliases_for_builtin("description", column_labels)
+        unit_aliases = _aliases_for_builtin("unit", column_labels)
+        price_aliases = _aliases_for_builtin("unit_price", column_labels)
+        header_skip = _activity_code_header_skip_tokens(column_labels)
+
         preview_rows: list[dict[str, Any]] = []
         for index, row in enumerate(raw_rows):
-            code = _str(pick(row, *ACTIVITY_CODE_ALIASES))
+            code = _str(pick(row, *code_aliases))
             if not code:
                 continue
             lower = code.lower()
-            if "sl.no" in lower or lower in {"sl no", "s.no", "sno", "code", "activity code"}:
+            if "sl.no" in lower or lower in header_skip:
                 continue
 
-            name = _str(pick(row, *ACTIVITY_NAME_ALIASES)) or code
-            description = _str(pick(row, *ACTIVITY_DESC_ALIASES))
-            unit = _str(pick(row, *ACTIVITY_UNIT_ALIASES)) or "Nos"
-            unit_price = _to_decimal(pick(row, *ACTIVITY_PRICE_ALIASES))
+            name = _str(pick(row, *name_aliases)) or code
+            description = _str(pick(row, *desc_aliases))
+            unit = _str(pick(row, *unit_aliases)) or "Nos"
+            unit_price = _to_decimal(pick(row, *price_aliases))
             custom = _map_custom_values(row, fields)
 
             mapped: dict[str, Any] = {
@@ -184,13 +238,31 @@ class CatalogImportService:
             mapped.update(custom)
             preview_rows.append(mapped)
 
+        def builtin_title(field_key: str, fallback: str) -> str:
+            if column_labels:
+                label = _str(column_labels.get(field_key))
+                if label:
+                    return label
+            return fallback
+
         columns = [
-            {"key": "code", "title": "Activity Code", "required": True, "width": 140},
-            {"key": "name", "title": "Name / Specification", "required": False, "width": 160},
-            {"key": "description", "title": "Description / Particulars", "required": False, "width": 200},
-            {"key": "unit", "title": "Unit", "required": False, "width": 90},
-            {"key": "unit_price", "title": "Cost / Unit Price", "required": False, "type": "number", "width": 120},
-            *[
+            {
+                "key": key,
+                "title": builtin_title(key, title),
+                "required": required,
+                "width": width,
+                **({"type": "number"} if key == "unit_price" else {}),
+            }
+            for key, title, required, width in [
+                ("code", "Activity Code", True, 140),
+                ("name", "Name / Specification", False, 160),
+                ("description", "Description / Particulars", False, 200),
+                ("unit", "Unit", False, 90),
+                ("unit_price", "Cost / Unit Price", False, 120),
+            ]
+        ]
+        columns.extend(
+            [
                 {
                     "key": f.field_key,
                     "title": f.field_label,
@@ -198,8 +270,8 @@ class CatalogImportService:
                     "width": 140,
                 }
                 for f in fields
-            ],
-        ]
+            ]
+        )
         return {"columns": columns, "rows": preview_rows, "total": len(preview_rows)}
 
     def preview_customers(

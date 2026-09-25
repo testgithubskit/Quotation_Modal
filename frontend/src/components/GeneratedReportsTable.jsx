@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Empty, Pagination, Popconfirm, Select, Space, Spin, Table, Tooltip, message,
+  Button, Dropdown, Empty, Pagination, Popconfirm, Select, Space, Spin, Table, Tag, Tooltip, message,
 } from 'antd';
 import {
-  AppstoreOutlined, DeleteOutlined, DownloadOutlined, EyeOutlined,
-  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, ReloadOutlined, UnorderedListOutlined,
+  AppstoreOutlined, DeleteOutlined, DownloadOutlined, EditOutlined,
+  EyeOutlined, FileExcelOutlined, FilePdfOutlined, FileTextOutlined, ReloadOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
+import { useLocation, useNavigate } from 'react-router-dom';
+import AdminReportActions from './AdminReportActions.jsx';
+import ReportReviewModal from './ReportReviewModal.jsx';
+import { templateForQuotation } from '../utils/templateSnapshot.js';
 import QuotationPdfPreviewModal from './QuotationPdfPreviewModal.jsx';
 import useQuotationPdfPreview from '../hooks/useQuotationPdfPreview.js';
 import dayjs from 'dayjs';
@@ -21,19 +26,62 @@ import {
 
 const PAGE_SIZE_GRID = 8;
 
-function timeAgo(iso) {
+function workflowStatusLabel(status) {
+  if (status === 'ACCEPTED') return 'Accepted';
+  if (status === 'REJECTED') return 'Rejected';
+  if (status === 'SENT') return 'Pending';
+  return status || '—';
+}
+
+function formatSubmittedAt(iso) {
+  if (!iso) return '—';
+  const d = dayjs(iso);
+  return d.isValid() ? d.format('DD MMM YYYY, HH:mm:ss') : '—';
+}
+
+function formatReportNo(record) {
+  const display = record.report_display_number || record.quotation_number || '—';
+  const rev = record.report_revision;
+  if (rev && rev > 1) {
+    return (
+      <span title={`Internal ref: ${record.quotation_number}`}>
+        {display}
+        <span className="ml-1 text-xs font-normal text-slate-500">(Rev {rev})</span>
+      </span>
+    );
+  }
+  return display;
+}
+
+function canReviseReport(record) {
+  return record?.status === 'REJECTED' && !record?.superseded_by;
+}
+
+function formatReviewedAt(iso) {
   if (!iso) return '';
   const d = dayjs(iso);
-  if (!d.isValid()) return '';
-  const mins = dayjs().diff(d, 'minute');
-  if (mins < 60) return `Updated ${Math.max(1, mins)}m ago`;
-  const hours = dayjs().diff(d, 'hour');
-  if (hours < 24) return `Updated ${hours}h ago`;
-  const days = dayjs().diff(d, 'day');
-  if (days < 14) return `Updated ${days}d ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 9) return `Updated ${weeks}w ago`;
-  return `Updated ${Math.max(1, Math.floor(days / 30))}mo ago`;
+  return d.isValid() ? d.format('DD/MM/YYYY, hh:mm A') : '';
+}
+
+function ReportStatusCell({ status, reviewedAt }) {
+  const label = workflowStatusLabel(status);
+  const showReviewTime = (status === 'ACCEPTED' || status === 'REJECTED') && reviewedAt;
+  const labelClass = status === 'ACCEPTED'
+    ? 'font-semibold text-green-600'
+    : status === 'REJECTED'
+      ? 'font-semibold text-red-600'
+      : status === 'SENT'
+        ? 'font-medium text-blue-600'
+        : 'text-slate-700';
+
+  return (
+    <div className="text-center leading-snug">
+      <div className={labelClass}>{label}</div>
+      {showReviewTime ? (
+        <div className="mt-0.5 text-xs text-slate-400">{formatReviewedAt(reviewedAt)}</div>
+      ) : null}
+    </div>
+  );
 }
 
 function ReportPreviewContent({ report, customer, template, organization }) {
@@ -180,12 +228,25 @@ async function loadReportContext(record, customersById, templatesById) {
   return {
     report: full,
     customer: customersById[full.customer_id],
-    template,
+    template: templateForQuotation(full, template),
     organization,
   };
 }
 
-function PrintMenu({ onPdf, onExcel, loading }) {
+function statusTagCompact(status) {
+  const map = {
+    SENT: ['processing', 'Pending'],
+    ACCEPTED: ['success', 'Accepted'],
+    REJECTED: ['error', 'Rejected'],
+  };
+  const [color, label] = map[status] || ['default', workflowStatusLabel(status)];
+  return <Tag color={color}>{label}</Tag>;
+}
+
+function PrintMenu({ onPdf, onExcel, loading, size = 'small' }) {
+  const btnClass = size === 'small'
+    ? ''
+    : 'flex h-8 w-8 items-center justify-center rounded-md border-0 bg-transparent p-0 shadow-none !text-teal-700 hover:!bg-slate-100';
   return (
     <Dropdown
       trigger={['click']}
@@ -215,8 +276,9 @@ function PrintMenu({ onPdf, onExcel, loading }) {
       <Tooltip title="Download">
         <Button
           type="text"
-          size="small"
-          icon={<DownloadOutlined />}
+          size={size}
+          className={btnClass || undefined}
+          icon={<DownloadOutlined className={size === 'small' ? undefined : 'text-lg'} />}
           loading={loading}
           onClick={(e) => e.stopPropagation()}
         />
@@ -225,12 +287,22 @@ function PrintMenu({ onPdf, onExcel, loading }) {
   );
 }
 
-export default function GeneratedReportsTable({ active = true }) {
+export default function GeneratedReportsTable({
+  active = true,
+  showSubmittedBy = false,
+  enableReview = false,
+  allowDelete = true,
+  revisePath = '/user/generate',
+}) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [highlightId, setHighlightId] = useState(null);
   const [rows, setRows] = useState([]);
   const [customersById, setCustomersById] = useState({});
   const [templatesById, setTemplatesById] = useState({});
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [customerFilter, setCustomerFilter] = useState([]);
   const [view, setView] = useState('grid');
   const [sortBy, setSortBy] = useState('date');
   const [page, setPage] = useState(1);
@@ -239,6 +311,17 @@ export default function GeneratedReportsTable({ active = true }) {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [cardCtxById, setCardCtxById] = useState({});
   const pdfPreview = useQuotationPdfPreview();
+  const [reviewModal, setReviewModal] = useState(null);
+
+  const mergeReviewFromDetail = (row, updated) => {
+    if (!updated?.id) return row;
+    return {
+      ...row,
+      status: updated.status ?? row.status,
+      review_remark: updated.review_remark ?? row.review_remark,
+      reviewed_at: updated.reviewed_at ?? row.reviewed_at,
+    };
+  };
 
   const load = async () => {
     setLoading(true);
@@ -306,7 +389,68 @@ export default function GeneratedReportsTable({ active = true }) {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortBy, view]);
+  }, [search, sortBy, view, customerFilter]);
+
+  useEffect(() => {
+    const focusId = location.state?.focusQuotationId;
+    if (!focusId) return;
+    setHighlightId(String(focusId));
+    setView('list');
+    navigate(location.pathname, { replace: true, state: {} });
+  }, [location.state, location.pathname, navigate]);
+
+  const filtered = useMemo(() => {
+    let list = rows.filter((r) => recordMatchesSearch(r, search, [
+      'quotation_number',
+      'status',
+      'notes',
+      'review_remark',
+      'created_by_name',
+      (row) => customersById[row.customer_id]?.name,
+      (row) => customersById[row.customer_id]?.company,
+      (row) => customersById[row.customer_id]?.email,
+      (row) => templatesById[row.quotation_template_id]?.name,
+      (row) => (row.created_at ? dayjs(row.created_at).format('DD MMM YYYY, HH:mm:ss') : ''),
+      (row) => String(row.total ?? ''),
+      (row) => `₹${Number(row.total || 0).toLocaleString('en-IN')}`,
+    ]));
+    if (customerFilter.length) {
+      const allowed = new Set(customerFilter);
+      list = list.filter((r) => allowed.has(customersById[r.customer_id]?.name));
+    }
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      if (sortBy === 'name') {
+        return String(a.quotation_number || '').localeCompare(String(b.quotation_number || ''));
+      }
+      if (sortBy === 'total') {
+        return Number(b.total || 0) - Number(a.total || 0);
+      }
+      return dayjs(b.created_at || 0).valueOf() - dayjs(a.created_at || 0).valueOf();
+    });
+    return sorted;
+  }, [rows, search, customerFilter, customersById, templatesById, sortBy]);
+
+  const customerOptions = useMemo(() => {
+    const names = new Set();
+    Object.values(customersById).forEach((c) => {
+      const name = String(c?.name || '').trim();
+      if (name) names.add(name);
+    });
+    return [...names].sort((a, b) => a.localeCompare(b)).map((name) => ({
+      label: name,
+      value: name,
+    }));
+  }, [customersById]);
+
+  useEffect(() => {
+    if (!highlightId || !filtered.length) return;
+    const idx = filtered.findIndex((r) => String(r.id) === String(highlightId));
+    if (idx >= 0) {
+      const effectivePageSize = view === 'grid' ? PAGE_SIZE_GRID : pageSize;
+      setPage(Math.floor(idx / effectivePageSize) + 1);
+    }
+  }, [highlightId, filtered, view, pageSize]);
 
   const remove = async (id) => {
     try {
@@ -355,37 +499,23 @@ export default function GeneratedReportsTable({ active = true }) {
     message.success('Excel downloaded');
   };
 
-  const filtered = useMemo(() => {
-    let list = rows.filter((r) => recordMatchesSearch(r, search, [
-      'quotation_number',
-      'status',
-      'notes',
-      (row) => customersById[row.customer_id]?.name,
-      (row) => customersById[row.customer_id]?.company,
-      (row) => customersById[row.customer_id]?.email,
-      (row) => templatesById[row.quotation_template_id]?.name,
-      (row) => (row.quotation_date ? dayjs(row.quotation_date).format('DD MMM YYYY') : ''),
-      (row) => String(row.total ?? ''),
-      (row) => `₹${Number(row.total || 0).toLocaleString('en-IN')}`,
-    ]));
-    const sorted = [...list];
-    sorted.sort((a, b) => {
-      if (sortBy === 'name') {
-        return String(a.quotation_number || '').localeCompare(String(b.quotation_number || ''));
-      }
-      if (sortBy === 'total') {
-        return Number(b.total || 0) - Number(a.total || 0);
-      }
-      return dayjs(b.quotation_date || 0).valueOf() - dayjs(a.quotation_date || 0).valueOf();
-    });
-    return sorted;
-  }, [rows, search, customersById, templatesById, sortBy]);
-
   const gridPageSize = PAGE_SIZE_GRID;
   const effectivePageSize = view === 'grid' ? gridPageSize : pageSize;
   const totalPages = Math.max(1, Math.ceil(filtered.length / effectivePageSize));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * effectivePageSize, safePage * effectivePageSize);
+
+  const isHighlighted = (record) => highlightId && String(record.id) === String(highlightId);
+
+  useEffect(() => {
+    if (!highlightId || view !== 'list') return undefined;
+    const timer = window.setTimeout(() => {
+      document
+        .querySelector(`tr[data-row-key="${highlightId}"]`)
+        ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [highlightId, safePage, view]);
 
   // Prefetch card contexts for visible grid items
   useEffect(() => {
@@ -417,12 +547,26 @@ export default function GeneratedReportsTable({ active = true }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
-        <div className="flex max-w-md flex-1 overflow-hidden rounded-lg border border-slate-300 bg-white">
-          <input
-            className="min-w-0 flex-1 border-0 px-3 py-2 text-sm outline-none"
-            placeholder="Search by any field"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+        <div className="flex shrink-0 flex-nowrap items-center gap-2">
+          <div className="flex w-72 overflow-hidden rounded-lg border border-slate-300 bg-white">
+            <input
+              className="min-w-0 flex-1 border-0 px-3 py-2 text-sm outline-none"
+              placeholder="Search by any field"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Select
+            mode="multiple"
+            allowClear
+            showSearch
+            placeholder="Filter by customer"
+            className="w-56 shrink-0"
+            value={customerFilter}
+            onChange={setCustomerFilter}
+            options={customerOptions}
+            optionFilterProp="label"
+            maxTagCount="responsive"
           />
         </div>
         <div className="flex overflow-hidden rounded-md border border-slate-200">
@@ -450,7 +594,7 @@ export default function GeneratedReportsTable({ active = true }) {
           onChange={setSortBy}
           className="!min-w-[180px]"
           options={[
-            { value: 'date', label: 'Report date' },
+            { value: 'date', label: 'Submitted at' },
             { value: 'name', label: 'Report no' },
             { value: 'total', label: 'Total amount' },
           ]}
@@ -476,11 +620,14 @@ export default function GeneratedReportsTable({ active = true }) {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {paged.map((record) => {
               const ctx = cardCtxById[record.id];
-              const updatedAt = record.updated_at || record.created_at;
               return (
                 <div
                   key={record.id}
-                  className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-teal-400 hover:shadow-md"
+                  className={`flex min-h-0 flex-col overflow-hidden rounded-lg border bg-white shadow-sm transition hover:border-teal-400 hover:shadow-md ${
+                    isHighlighted(record)
+                      ? 'report-row-highlight border-teal-300 ring-2 ring-teal-200'
+                      : 'border-slate-200'
+                  }`}
                 >
                   <div className="relative cursor-pointer" onClick={() => openPreview(record)}>
                     {ctx ? (
@@ -508,23 +655,64 @@ export default function GeneratedReportsTable({ active = true }) {
                       <div className="truncate text-sm font-semibold text-slate-800">
                         {record.quotation_number || 'Report'}
                       </div>
-                      <Tooltip title={updatedAt ? dayjs(updatedAt).format('DD MMM YYYY, hh:mm A') : ''}>
-                        <div className="truncate text-[11px] text-slate-500">
-                          {customersById[record.customer_id]?.name || '—'}
-                          {' · '}
-                          {timeAgo(updatedAt)}
-                        </div>
-                      </Tooltip>
+                      <div className="truncate text-[11px] text-slate-500">
+                        {customersById[record.customer_id]?.name || '—'}
+                        {showSubmittedBy && record.created_by_name ? (
+                          <>
+                            {' · '}
+                            {record.created_by_name}
+                          </>
+                        ) : null}
+                        {' · '}
+                        {statusTagCompact(record.status)}
+                      </div>
                     </button>
-                    <Space size={0}>
-                      <PrintMenu
-                        loading={busyId === record.id || pdfDownloading}
-                        onPdf={() => withContext(record, (c) => downloadPdf(c))}
-                        onExcel={() => withContext(record, (c) => downloadExcel(c))}
-                      />
-                      <Popconfirm title="Delete report?" onConfirm={() => remove(record.id)}>
-                        <Button type="text" size="small" danger icon={<DeleteOutlined />} />
-                      </Popconfirm>
+                    <Space size={0} onClick={(e) => e.stopPropagation()}>
+                      {enableReview ? (
+                        <AdminReportActions
+                          record={record}
+                          showReview
+                          viewLoading={busyId === record.id}
+                          onView={() => openPreview(record)}
+                          onApprove={() => setReviewModal({ quotation: record, decision: 'ACCEPTED' })}
+                          onReject={() => setReviewModal({ quotation: record, decision: 'REJECTED' })}
+                        />
+                      ) : (
+                        <PrintMenu
+                          loading={busyId === record.id || pdfDownloading}
+                          onPdf={() => withContext(record, (c) => downloadPdf(c))}
+                          onExcel={() => withContext(record, (c) => downloadExcel(c))}
+                        />
+                      )}
+                      {!enableReview ? (
+                        <Tooltip title="Preview">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EyeOutlined />}
+                            loading={busyId === record.id}
+                            onClick={() => openPreview(record)}
+                          />
+                        </Tooltip>
+                      ) : null}
+                      {canReviseReport(record) && !allowDelete ? (
+                        <Tooltip title="Revise & resubmit">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<EditOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`${revisePath}?edit=${record.id}`);
+                            }}
+                          />
+                        </Tooltip>
+                      ) : null}
+                      {allowDelete ? (
+                        <Popconfirm title="Delete report?" onConfirm={() => remove(record.id)}>
+                          <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                        </Popconfirm>
+                      ) : null}
                     </Space>
                   </div>
                 </div>
@@ -548,6 +736,8 @@ export default function GeneratedReportsTable({ active = true }) {
           <Table
             className="app-data-table"
             rowKey="id"
+            rowClassName={(record) => (isHighlighted(record) ? 'report-row-highlight' : '')}
+            scroll={{ x: 'max-content' }}
             loading={loading}
             dataSource={filtered}
             pagination={{
@@ -565,22 +755,44 @@ export default function GeneratedReportsTable({ active = true }) {
               {
                 title: 'Report No',
                 dataIndex: 'quotation_number',
-                sorter: (a, b) => String(a.quotation_number || '').localeCompare(String(b.quotation_number || '')),
+                sorter: (a, b) => String(a.report_display_number || a.quotation_number || '')
+                  .localeCompare(String(b.report_display_number || b.quotation_number || '')),
+                render: (_, r) => formatReportNo(r),
               },
               {
                 title: 'Customer',
                 key: 'customer',
                 render: (_, r) => customersById[r.customer_id]?.name || '—',
               },
+              ...(showSubmittedBy ? [{
+                title: 'Submitted by',
+                key: 'submitted_by',
+                sorter: (a, b) => String(a.created_by_name || '').localeCompare(String(b.created_by_name || '')),
+                render: (_, r) => r.created_by_name || '—',
+              }] : []),
               {
-                title: 'Date',
-                dataIndex: 'quotation_date',
-                render: (v) => (v ? dayjs(v).format('DD MMM YYYY') : '—'),
+                title: 'Submitted at',
+                key: 'submitted_at',
+                sorter: (a, b) => dayjs(a.created_at || 0).valueOf() - dayjs(b.created_at || 0).valueOf(),
+                render: (_, r) => formatSubmittedAt(r.created_at),
               },
               {
-                title: 'Updated',
-                key: 'updated',
-                render: (_, r) => timeAgo(r.updated_at || r.created_at),
+                title: 'Status',
+                key: 'status',
+                width: 160,
+                render: (_, r) => (
+                  <ReportStatusCell status={r.status} reviewedAt={r.reviewed_at} />
+                ),
+              },
+              {
+                title: 'Remarks',
+                key: 'remarks',
+                ellipsis: true,
+                render: (_, r) => (
+                  r.review_remark
+                    ? <span title={r.review_remark}>{r.review_remark}</span>
+                    : '—'
+                ),
               },
               {
                 title: 'Total',
@@ -590,25 +802,59 @@ export default function GeneratedReportsTable({ active = true }) {
               {
                 title: 'Actions',
                 key: 'actions',
-                width: 160,
+                fixed: 'right',
+                width: enableReview ? 200 : 160,
+                className: 'report-actions-col',
                 render: (_, record) => (
-                  <Space size={0}>
-                    <Tooltip title="Preview">
-                      <Button
-                        type="text"
-                        icon={<EyeOutlined />}
-                        loading={busyId === record.id}
-                        onClick={() => openPreview(record)}
-                      />
-                    </Tooltip>
-                    <PrintMenu
-                      loading={busyId === record.id || pdfDownloading}
-                      onPdf={() => withContext(record, (c) => downloadPdf(c))}
-                      onExcel={() => withContext(record, (c) => downloadExcel(c))}
-                    />
-                    <Popconfirm title="Delete report?" onConfirm={() => remove(record.id)}>
-                      <Button type="text" danger icon={<DeleteOutlined />} />
-                    </Popconfirm>
+                  <Space size={0} wrap={false} className="report-actions-cell">
+                    {enableReview ? (
+                      <>
+                        <AdminReportActions
+                          record={record}
+                          showReview
+                          viewLoading={busyId === record.id}
+                          onView={() => openPreview(record)}
+                          onApprove={() => setReviewModal({ quotation: record, decision: 'ACCEPTED' })}
+                          onReject={() => setReviewModal({ quotation: record, decision: 'REJECTED' })}
+                        />
+                        <PrintMenu
+                          size="middle"
+                          loading={busyId === record.id || pdfDownloading}
+                          onPdf={() => withContext(record, (c) => downloadPdf(c))}
+                          onExcel={() => withContext(record, (c) => downloadExcel(c))}
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <Tooltip title="Preview">
+                          <Button
+                            type="text"
+                            icon={<EyeOutlined />}
+                            loading={busyId === record.id}
+                            onClick={() => openPreview(record)}
+                          />
+                        </Tooltip>
+                        <PrintMenu
+                          loading={busyId === record.id || pdfDownloading}
+                          onPdf={() => withContext(record, (c) => downloadPdf(c))}
+                          onExcel={() => withContext(record, (c) => downloadExcel(c))}
+                        />
+                      </>
+                    )}
+                    {canReviseReport(record) && !allowDelete ? (
+                      <Tooltip title="Revise & resubmit">
+                        <Button
+                          type="text"
+                          icon={<EditOutlined />}
+                          onClick={() => navigate(`${revisePath}?edit=${record.id}`)}
+                        />
+                      </Tooltip>
+                    ) : null}
+                    {allowDelete ? (
+                      <Popconfirm title="Delete report?" onConfirm={() => remove(record.id)}>
+                        <Button type="text" danger icon={<DeleteOutlined />} />
+                      </Popconfirm>
+                    ) : null}
                   </Space>
                 ),
               },
@@ -617,6 +863,21 @@ export default function GeneratedReportsTable({ active = true }) {
         </div>
       )}
       </div>
+
+      <ReportReviewModal
+        open={Boolean(reviewModal)}
+        quotation={reviewModal?.quotation}
+        decision={reviewModal?.decision || 'ACCEPTED'}
+        onClose={() => setReviewModal(null)}
+        onDone={async (updated) => {
+          if (updated?.id) {
+            setRows((prev) => prev.map((r) => (
+              String(r.id) === String(updated.id) ? mergeReviewFromDetail(r, updated) : r
+            )));
+          }
+          await load();
+        }}
+      />
 
       <QuotationPdfPreviewModal
         open={pdfPreview.open}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Button, Dropdown, Form, Input, Modal, Popconfirm, Space, Table, Tooltip, message,
+  Button, Dropdown, Form, Input, Modal, Popconfirm, Select, Space, Table, Tooltip, message,
 } from 'antd';
 import {
   PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
@@ -48,6 +48,7 @@ export default function Customers() {
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [companyFilter, setCompanyFilter] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [createOpen, setCreateOpen] = useState(false);
@@ -57,6 +58,7 @@ export default function Customers() {
   const [previewRows, setPreviewRows] = useState([]);
   const [previewColumns, setPreviewColumns] = useState([]);
   const [importing, setImporting] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState({});
   const [form] = Form.useForm();
@@ -105,10 +107,26 @@ export default function Customers() {
     };
   }, []);
 
-  const filtered = useMemo(
-    () => allRows.filter((r) => recordMatchesSearch(r, search)),
-    [allRows, search],
-  );
+  const companyOptions = useMemo(() => {
+    const names = new Set();
+    allRows.forEach((r) => {
+      const name = String(r.notes || '').trim();
+      if (name) names.add(name);
+    });
+    return [...names].sort((a, b) => a.localeCompare(b)).map((name) => ({
+      label: name,
+      value: name,
+    }));
+  }, [allRows]);
+
+  const filtered = useMemo(() => {
+    let list = allRows.filter((r) => recordMatchesSearch(r, search));
+    if (companyFilter.length) {
+      const allowed = new Set(companyFilter);
+      list = list.filter((r) => allowed.has(String(r.notes || '').trim()));
+    }
+    return list;
+  }, [allRows, search, companyFilter]);
   const paged = useMemo(
     () => filtered.slice((page - 1) * pageSize, page * pageSize),
     [filtered, page, pageSize],
@@ -218,6 +236,21 @@ export default function Customers() {
       load();
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Delete failed'));
+    }
+  };
+
+  const deleteAll = async () => {
+    setDeletingAll(true);
+    try {
+      const { data } = await api.delete('/customers/all');
+      message.success(data?.message || 'All customers deleted');
+      cancelEdit();
+      setPage(1);
+      await load();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, 'Delete all failed'));
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -371,6 +404,23 @@ export default function Customers() {
           setSearch(value);
           setPage(1);
         }}
+        filter={(
+          <Select
+            mode="multiple"
+            allowClear
+            showSearch
+            placeholder="Filter by company"
+            className="w-56 shrink-0"
+            value={companyFilter}
+            onChange={(value) => {
+              setCompanyFilter(value);
+              setPage(1);
+            }}
+            options={companyOptions}
+            optionFilterProp="label"
+            maxTagCount="responsive"
+          />
+        )}
         onRefresh={load}
         refreshing={loading}
         actions={(
@@ -385,6 +435,18 @@ export default function Customers() {
             >
               Bulk upload
             </Button>
+            <Popconfirm
+              title="Delete all customers?"
+              description="This removes every customer in your organization."
+              okText="Delete all"
+              okButtonProps={{ danger: true }}
+              onConfirm={deleteAll}
+              disabled={!allRows.length}
+            >
+              <Button danger icon={<DeleteOutlined />} loading={deletingAll} disabled={!allRows.length}>
+                Delete all
+              </Button>
+            </Popconfirm>
             <Dropdown
               menu={{
                 items: [

@@ -2,6 +2,7 @@ const STORAGE_KEY = 'qm-activity-column-config';
 
 /** Built-in activity columns (data lives on activity record; labels/required/hidden are configurable). */
 export const ACTIVITY_BUILTIN_DEFS = [
+  { field_key: 'code', field_label: 'Activity Code', field_type: 'TEXT', no_hide: true },
   { field_key: 'name', field_label: 'Name', field_type: 'TEXT' },
   { field_key: 'description', field_label: 'Description', field_type: 'TEXTAREA' },
   { field_key: 'unit', field_label: 'Unit', field_type: 'TEXT' },
@@ -33,6 +34,7 @@ export function getActivityBuiltinColumns() {
       is_required: Boolean(override.is_required),
       is_hidden: Boolean(override.is_hidden),
       is_builtin: true,
+      no_hide: Boolean(def.no_hide),
       entity_type: 'ACTIVITY',
     };
   }).filter((c) => !c.is_hidden);
@@ -50,6 +52,7 @@ export function getAllActivityBuiltinColumnsIncludingHidden() {
       is_required: Boolean(override.is_required),
       is_hidden: Boolean(override.is_hidden),
       is_builtin: true,
+      no_hide: Boolean(def.no_hide),
       entity_type: 'ACTIVITY',
     };
   });
@@ -62,6 +65,8 @@ export function updateActivityBuiltinColumn(fieldKey, patch) {
 }
 
 export function hideActivityBuiltinColumn(fieldKey) {
+  const def = ACTIVITY_BUILTIN_DEFS.find((d) => d.field_key === fieldKey);
+  if (def?.no_hide) return;
   updateActivityBuiltinColumn(fieldKey, { is_hidden: true });
 }
 
@@ -70,6 +75,7 @@ export function restoreActivityBuiltinColumn(fieldKey) {
 }
 
 export function readActivityBuiltinValue(record, fieldKey) {
+  if (fieldKey === 'code') return record.code;
   if (fieldKey === 'unit_price') return record.unit_price;
   if (fieldKey === 'name') return record.name;
   if (fieldKey === 'description') return record.description;
@@ -77,10 +83,20 @@ export function readActivityBuiltinValue(record, fieldKey) {
   return record[fieldKey];
 }
 
+/** field_key → display label for bulk import (includes renamed built-ins). */
+export function getActivityBuiltinImportLabels() {
+  const labels = {};
+  getAllActivityBuiltinColumnsIncludingHidden().forEach((col) => {
+    labels[col.field_key] = col.field_label;
+  });
+  return labels;
+}
+
 export function builtinAliases(column) {
   const label = column.field_label;
   const key = column.field_key;
   const defaults = {
+    code: ['Activity Code', 'activity_code', 'code', 'Code'],
     name: ['name', 'Name', 'Particulars', 'particulars', 'specification', 'Item'],
     description: ['description', 'Description', 'Specifications', 'Specification', 'Scope of Calibration', 'particulars'],
     unit: ['unit', 'Unit'],

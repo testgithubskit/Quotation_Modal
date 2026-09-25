@@ -1,7 +1,41 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Layout, Menu } from 'antd';
+import { Badge, Layout, Menu } from 'antd';
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { cn } from '../utils/cn';
+
+function withMenuBadges(items, badgeByKey = {}, collapsed = false) {
+  return (items || []).map((item) => {
+    const count = badgeByKey[item.key];
+    const next = { ...item };
+    if (item.children?.length) {
+      next.children = withMenuBadges(item.children, badgeByKey, collapsed);
+      return next;
+    }
+    if (!count) return next;
+    const n = Number(count) || 0;
+    if (n <= 0) return next;
+    const badge = (
+      <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-md bg-red-500 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white tabular-nums">
+        {n > 99 ? '99+' : n}
+      </span>
+    );
+    if (collapsed) {
+      next.icon = (
+        <Badge count={n} size="small" offset={[2, 0]}>
+          {item.icon}
+        </Badge>
+      );
+      return next;
+    }
+    next.label = (
+      <span className="flex min-w-0 flex-1 items-center justify-between gap-2 pr-0.5">
+        <span className="truncate">{item.label}</span>
+        {badge}
+      </span>
+    );
+    return next;
+  });
+}
 
 const { Sider } = Layout;
 
@@ -21,6 +55,7 @@ export default function Sidebar({
   selectedKeys = [],
   onMenuClick,
   width = 236,
+  badgeByKey = {},
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const autoOpenKeys = useMemo(
@@ -28,6 +63,10 @@ export default function Sidebar({
     [items, selectedKeys],
   );
   const [openKeys, setOpenKeys] = useState(autoOpenKeys);
+  const menuItems = useMemo(
+    () => withMenuBadges(items, badgeByKey, collapsed),
+    [items, badgeByKey, collapsed],
+  );
 
   useEffect(() => {
     setOpenKeys((prev) => Array.from(new Set([...prev, ...autoOpenKeys])));
@@ -62,7 +101,7 @@ export default function Sidebar({
             selectedKeys={selectedKeys}
             openKeys={collapsed ? [] : openKeys}
             onOpenChange={setOpenKeys}
-            items={items}
+            items={menuItems}
             onClick={onMenuClick}
             inlineCollapsed={collapsed}
             className="!border-none !bg-transparent"

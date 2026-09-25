@@ -22,6 +22,7 @@ from app.models import User
 from app.models.enums import AuditAction, UserRoleName
 from app.schemas.auth import LoginRequest, ResetPasswordRequest, SignupRequest, TokenResponse
 from app.services.audit_log import audit_log_service
+from app.services.default_quotation_template import provision_default_template_for_organization
 
 
 class AuthService:
@@ -60,6 +61,7 @@ class AuthService:
                 "custom_data": {},
             },
         )
+        provision_default_template_for_organization(db, organization.id)
         audit_log_service.record(
             db,
             organization_id=organization.id,

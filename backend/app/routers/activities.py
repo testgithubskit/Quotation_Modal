@@ -1,6 +1,7 @@
+import json
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, UploadFile, status
 
 from app.api.deps import DbSession, Pagination, require_permission
 from app.core.exceptions import AppError
@@ -33,20 +34,44 @@ def list_activities(
     )
 
 
+def _parse_column_labels(raw: str | None) -> dict[str, str] | None:
+    if not raw or not raw.strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    out: dict[str, str] = {}
+    for key, value in parsed.items():
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            out[str(key)] = text
+    return out or None
+
+
 @router.post("/import/preview", response_model=SpreadsheetPreviewResponse)
 async def preview_activities_import(
     db: DbSession,
     current_user: User = Depends(require_permission("activities:create")),
     file: UploadFile = File(...),
+    column_labels: str | None = Form(None),
 ) -> SpreadsheetPreviewResponse:
     filename = file.filename or "upload.xlsx"
     data = await file.read()
     if not data:
         raise AppError("Empty file", status_code=400, code="empty_file")
-    preview = catalog_import_service.preview_activities(db, current_user, data, filename)
+    labels = _parse_column_labels(column_labels)
+    preview = catalog_import_service.preview_activities(
+        db, current_user, data, filename, column_labels=labels
+    )
+    code_label = (labels or {}).get("code") or "Activity Code"
     if not preview["rows"]:
         raise AppError(
-            "No valid activity rows found (need Activity Code). Only columns already defined in the app are extracted.",
+            f"No valid activity rows found (need {code_label}). Only columns already defined in the app are extracted.",
             status_code=400,
             code="empty_preview",
         )
@@ -63,6 +88,15 @@ def confirm_activities_import(
         raise AppError("No rows to import", status_code=400, code="empty_import")
     result = catalog_import_service.confirm_activities(db, current_user, payload.rows)
     return SpreadsheetImportResponse.from_result(result, "Activities")
+
+
+@router.delete("/all", response_model=MessageResponse)
+def delete_all_activities(
+    db: DbSession,
+    current_user: User = Depends(require_permission("activities:delete")),
+) -> MessageResponse:
+    count = activity_service.delete_all(db, current_user)
+    return MessageResponse(message=f"Deleted {count} activit{'y' if count == 1 else 'ies'}")
 
 
 @router.post("", response_model=ActivityResponse, status_code=status.HTTP_201_CREATED)

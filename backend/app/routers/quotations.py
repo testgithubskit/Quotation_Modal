@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import select
 
 from app.api.deps import DbSession, Pagination, require_permission
 from app.models import User
@@ -19,6 +20,26 @@ from app.services.quotation import quotation_service
 router = APIRouter()
 
 
+def _serialize_quotation_list(db: DbSession, items: list) -> list[QuotationListResponse]:
+    if not items:
+        return []
+    creator_ids = {q.created_by for q in items}
+    creators = list(db.scalars(select(User).where(User.id.in_(creator_ids))).all())
+    names_by_id = {u.id: u.full_name for u in creators}
+    out: list[QuotationListResponse] = []
+    for item in items:
+        payload = QuotationListResponse.model_validate(item).model_dump()
+        payload["created_by_name"] = names_by_id.get(item.created_by) or ""
+        custom = item.custom_data or {}
+        lineage = custom.get("_report_lineage") or {}
+        payload["report_display_number"] = lineage.get("display_number") or item.quotation_number
+        payload["report_revision"] = int(lineage.get("revision") or 1)
+        superseded = custom.get("_superseded_by")
+        payload["superseded_by"] = UUID(str(superseded)) if superseded else None
+        out.append(QuotationListResponse.model_validate(payload))
+    return out
+
+
 @router.get("", response_model=PaginatedResponse[QuotationListResponse])
 def list_quotations(
     db: DbSession,
@@ -35,7 +56,7 @@ def list_quotations(
         **pagination,
     )
     return PaginatedResponse.build(
-        [QuotationListResponse.model_validate(item) for item in items],
+        _serialize_quotation_list(db, items),
         total,
         pagination["page"],
         pagination["page_size"],
@@ -49,6 +70,18 @@ def create_quotation(
     current_user: User = Depends(require_permission("quotations:create")),
 ) -> QuotationResponse:
     return QuotationResponse.model_validate(quotation_service.create(db, current_user, payload))
+
+
+@router.post("/{quotation_id}/resubmit", response_model=QuotationResponse, status_code=status.HTTP_201_CREATED)
+def resubmit_quotation(
+    quotation_id: UUID,
+    payload: QuotationCreate,
+    db: DbSession,
+    current_user: User = Depends(require_permission("quotations:create")),
+) -> QuotationResponse:
+    return QuotationResponse.model_validate(
+        quotation_service.resubmit(db, current_user, quotation_id, payload)
+    )
 
 
 @router.get("/{quotation_id}", response_model=QuotationResponse)

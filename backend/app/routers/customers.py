@@ -65,6 +65,15 @@ def confirm_customers_import(
     return SpreadsheetImportResponse.from_result(result, "Customers")
 
 
+@router.delete("/all", response_model=MessageResponse)
+def delete_all_customers(
+    db: DbSession,
+    current_user: User = Depends(require_permission("customers:delete")),
+) -> MessageResponse:
+    count = customer_service.delete_all(db, current_user)
+    return MessageResponse(message=f"Deleted {count} customer{'s' if count != 1 else ''}")
+
+
 @router.post("", response_model=CustomerResponse, status_code=status.HTTP_201_CREATED)
 def create_customer(
     payload: CustomerCreate,

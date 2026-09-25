@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy import delete
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.crud import activity as activity_crud
 from app.crud import customer as customer_crud
 from app.models import Activity, Customer, User
@@ -88,6 +90,32 @@ class CustomerService:
         )
         db.commit()
 
+    def delete_all(self, db: Session, current_user: User) -> int:
+        org_id = current_user.organization_id
+        try:
+            result = db.execute(delete(Customer).where(Customer.organization_id == org_id))
+            deleted = int(result.rowcount or 0)
+            if deleted:
+                audit_log_service.record(
+                    db,
+                    organization_id=org_id,
+                    user_id=current_user.id,
+                    action=AuditAction.DELETE,
+                    entity_type="Customer",
+                    entity_id=None,
+                    new_data={"bulk_delete": True, "count": deleted},
+                )
+            db.commit()
+            return deleted
+        except IntegrityError as exc:
+            db.rollback()
+            raise AppError(
+                "Cannot delete all customers while quotations still reference them. "
+                "Remove or reassign those reports first.",
+                status_code=409,
+                code="customers_in_use",
+            ) from exc
+
 
 class ActivityService:
     def list(self, db: Session, current_user: User, **params) -> tuple[list[Activity], int]:
@@ -161,6 +189,23 @@ class ActivityService:
             entity_id=activity_id,
         )
         db.commit()
+
+    def delete_all(self, db: Session, current_user: User) -> int:
+        org_id = current_user.organization_id
+        result = db.execute(delete(Activity).where(Activity.organization_id == org_id))
+        deleted = int(result.rowcount or 0)
+        if deleted:
+            audit_log_service.record(
+                db,
+                organization_id=org_id,
+                user_id=current_user.id,
+                action=AuditAction.DELETE,
+                entity_type="Activity",
+                entity_id=None,
+                new_data={"bulk_delete": True, "count": deleted},
+            )
+        db.commit()
+        return deleted
 
 
 customer_service = CustomerService()

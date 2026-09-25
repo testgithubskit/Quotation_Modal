@@ -7,16 +7,13 @@ import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { slNoColumn } from '../../utils/tableHelpers';
-function StatCard({ label, value, onClick }) {
+import { templateForQuotation } from '../../utils/templateSnapshot.js';
+function StatCard({ label, value }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full rounded-lg border border-slate-200 border-t-[3px] border-t-teal-600 bg-white p-4 text-left shadow-sm transition hover:border-teal-300"
-    >
+    <div className="w-full rounded-lg border border-slate-200 border-t-[3px] border-t-teal-600 bg-white p-4 text-left shadow-sm">
       <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-teal-700">{value}</div>
-    </button>
+    </div>
   );
 }
 
@@ -87,7 +84,7 @@ export default function Dashboard() {
       await pdfPreview.openPreview({
         report: full,
         customer: customersById[full.customer_id],
-        template,
+        template: templateForQuotation(full, template),
         organization,
       });
     } catch (error) {
@@ -109,19 +106,18 @@ export default function Dashboard() {
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto">
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Users" value={users.length} onClick={() => navigate('/admin/configuration?tab=user')} />
+          <StatCard label="Users" value={users.length} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Customers" value={customers.length} onClick={() => navigate('/admin/configuration?tab=customers')} />
+          <StatCard label="Customers" value={customers.length} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Activities" value={activities.length} onClick={() => navigate('/admin/activities')} />
+          <StatCard label="Activities" value={activities.length} />
         </Col>
         <Col xs={24} sm={12} lg={6}>
           <StatCard
             label="Quotations"
             value={quotations.length}
-            onClick={() => navigate('/admin/report/generated')}
           />
         </Col>
       </Row>
@@ -154,6 +150,12 @@ export default function Dashboard() {
               render: (_, r) => customersById[r.customer_id]?.name || '—',
               sorter: (a, b) => String(customersById[a.customer_id]?.name || '')
                 .localeCompare(String(customersById[b.customer_id]?.name || '')),
+            },
+            {
+              title: 'Submitted by',
+              key: 'submitted_by',
+              render: (_, r) => r.created_by_name || '—',
+              sorter: (a, b) => String(a.created_by_name || '').localeCompare(String(b.created_by_name || '')),
             },
             {
               title: 'Date',

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.crud.base import CRUDBase
 from app.models import Organization, Permission, Role, RolePermission, User
+from app.models.enums import UserRoleName
 
 
 class CRUDOrganization(CRUDBase[Organization]):
@@ -31,6 +32,18 @@ class CRUDUser(CRUDBase[User]):
             )
             .where(User.id == user_id)
         )
+
+    def list_admins_by_org(self, db: Session, organization_id: UUID) -> list[User]:
+        stmt = (
+            select(User)
+            .join(Role, User.role_id == Role.id)
+            .where(
+                User.organization_id == organization_id,
+                User.is_active.is_(True),
+                Role.name == UserRoleName.ADMIN.value,
+            )
+        )
+        return list(db.scalars(stmt).all())
 
     def list_by_org(self, db: Session, organization_id, **kwargs):
         kwargs.setdefault("sort_by", "created_at")

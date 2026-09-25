@@ -8,7 +8,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.models.enums import CustomFieldEntity, CustomFieldType, QuotationStatus
+from app.models.enums import CustomFieldEntity, CustomFieldType, NotificationKind, QuotationStatus
 from app.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 
@@ -127,6 +127,7 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         foreign_keys="Quotation.created_by",
     )
     audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="user")
+    notifications: Mapped[list["Notification"]] = relationship(back_populates="user")
 
 
 class Customer(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -252,6 +253,8 @@ class Quotation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     total: Mapped[Decimal] = mapped_column(Numeric(14, 2), default=Decimal("0.00"), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    review_remark: Mapped[Optional[str]] = mapped_column(Text)
+    reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     custom_data: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     organization: Mapped["Organization"] = relationship(back_populates="quotations")
@@ -270,6 +273,10 @@ class Quotation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="quotation",
         cascade="all, delete-orphan",
         order_by="QuotationVersion.version_number",
+    )
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="quotation",
+        cascade="all, delete-orphan",
     )
 
 
@@ -360,6 +367,41 @@ class CustomFieldDefinition(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     validation_rules: Mapped[Optional[dict]] = mapped_column(JSONB)
 
     organization: Mapped["Organization"] = relationship(back_populates="custom_field_definitions")
+
+
+class Notification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_organization_id", "organization_id"),
+        Index("ix_notifications_user_id", "user_id"),
+        Index("ix_notifications_quotation_id", "quotation_id"),
+        Index("ix_notifications_acknowledged_at", "acknowledged_at"),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    quotation_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("quotations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    kind: Mapped[NotificationKind] = mapped_column(
+        Enum(NotificationKind, name="notification_kind"),
+        nullable=False,
+    )
+    message: Mapped[Optional[str]] = mapped_column(Text)
+    acknowledged_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship(back_populates="notifications")
+    quotation: Mapped["Quotation"] = relationship(back_populates="notifications")
 
 
 class AuditLog(UUIDPrimaryKeyMixin, Base):

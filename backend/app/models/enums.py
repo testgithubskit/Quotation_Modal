@@ -39,6 +39,12 @@ class CustomFieldType(str, enum.Enum):
     URL = "URL"
 
 
+class NotificationKind(str, enum.Enum):
+    REPORT_SUBMITTED = "REPORT_SUBMITTED"
+    REPORT_ACCEPTED = "REPORT_ACCEPTED"
+    REPORT_REJECTED = "REPORT_REJECTED"
+
+
 class AuditAction(str, enum.Enum):
     CREATE = "CREATE"
     UPDATE = "UPDATE"

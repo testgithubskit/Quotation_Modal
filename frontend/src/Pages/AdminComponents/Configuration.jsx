@@ -238,13 +238,13 @@ function OrgDetails() {
 
 export default function Configuration() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get('tab') || 'org';
+  const tab = searchParams.get('tab') || 'customers';
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <Tabs
-        activeKey={['customers', 'org', 'user', 'audit'].includes(tab) ? tab : 'org'}
-        onChange={(key) => setSearchParams(key === 'org' ? {} : { tab: key })}
+        activeKey={['customers', 'org', 'user', 'audit'].includes(tab) ? tab : 'customers'}
+        onChange={(key) => setSearchParams(key === 'customers' ? {} : { tab: key })}
         className="config-tabs min-h-0 flex-1"
         items={[
           { key: 'customers', label: 'Customers', children: <Customers /> },

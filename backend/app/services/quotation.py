@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
-from app.core.exceptions import AppError, ConflictError, NotFoundError
+from app.core.exceptions import AppError, ConflictError, ForbiddenError, NotFoundError
 from app.crud import activity as activity_crud
 from app.crud import customer as customer_crud
 from app.crud import quotation as quotation_crud
@@ -15,7 +17,7 @@ from app.crud import quotation_item as quotation_item_crud
 from app.crud import quotation_template as quotation_template_crud
 from app.crud import quotation_version as quotation_version_crud
 from app.models import Quotation, QuotationItem, QuotationTemplate, QuotationVersion, User
-from app.models.enums import AuditAction, CustomFieldEntity, QuotationStatus
+from app.models.enums import AuditAction, CustomFieldEntity, NotificationKind, QuotationStatus, UserRoleName
 from app.schemas.quotation import (
     QuotationCreate,
     QuotationItemCreate,
@@ -27,11 +29,44 @@ from app.schemas.quotation import (
 from app.services.audit_log import audit_log_service
 from app.services.custom_field import validate_custom_data
 from app.services.quotation_calculation import calculate_quotation_totals
+from app.services.notification import notification_service
 from app.services.quotation_status import assert_editable, can_transition
+
+TEMPLATE_SNAPSHOT_KEY = "_template_snapshot"
 
 
 def _decimal_str(value: Decimal | None) -> str:
     return str(value if value is not None else Decimal("0"))
+
+
+def _is_admin(user: User) -> bool:
+    return bool(user.role and user.role.name == UserRoleName.ADMIN.value)
+
+
+def _assert_quotation_access(user: User, quotation: Quotation) -> None:
+    if _is_admin(user):
+        return
+    if quotation.created_by != user.id:
+        raise NotFoundError("Quotation not found")
+
+
+def _template_snapshot_payload(template: QuotationTemplate) -> dict[str, Any]:
+    return {
+        "name": template.name,
+        "template_data": deepcopy(template.template_data or {}),
+        "custom_data": deepcopy(template.custom_data or {}),
+    }
+
+
+def _embed_template_snapshot(
+    custom_data: dict[str, Any],
+    template: QuotationTemplate | None,
+) -> dict[str, Any]:
+    if not template:
+        return custom_data
+    merged = dict(custom_data or {})
+    merged[TEMPLATE_SNAPSHOT_KEY] = _template_snapshot_payload(template)
+    return merged
 
 
 class QuotationService:
@@ -43,12 +78,15 @@ class QuotationService:
             extra.append(Quotation.status == status)
         if customer_id:
             extra.append(Quotation.customer_id == customer_id)
+        if not _is_admin(current_user):
+            extra.append(Quotation.created_by == current_user.id)
         return quotation_crud.list_by_org(db, current_user.organization_id, extra_filters=extra or None, **params)
 
     def get(self, db: Session, current_user: User, quotation_id: UUID) -> Quotation:
         quotation = quotation_crud.get_by_org_with_items(db, current_user.organization_id, quotation_id)
         if quotation is None:
             raise NotFoundError("Quotation not found")
+        _assert_quotation_access(current_user, quotation)
         return quotation
 
     def create(self, db: Session, current_user: User, payload: QuotationCreate) -> Quotation:
@@ -74,6 +112,10 @@ class QuotationService:
             payload.custom_data,
             allow_unknown=True,
         )
+        custom_data = _embed_template_snapshot(custom_data, template)
+        initial_status = (
+            QuotationStatus.SENT if not _is_admin(current_user) else QuotationStatus.DRAFT
+        )
         quotation = quotation_crud.create(
             db,
             {
@@ -84,7 +126,7 @@ class QuotationService:
                 "quotation_number": quotation_number,
                 "quotation_date": payload.quotation_date or datetime.now(timezone.utc),
                 "validity_date": payload.validity_date,
-                "status": QuotationStatus.DRAFT,
+                "status": initial_status,
                 "discount": payload.discount,
                 "currency": payload.currency,
                 "notes": payload.notes,
@@ -93,6 +135,10 @@ class QuotationService:
         )
         self._replace_items(db, current_user, quotation, payload.items)
         self._recalculate(db, quotation)
+        if initial_status == QuotationStatus.SENT:
+            self._ensure_report_lineage(quotation, quotation_number)
+            flag_modified(quotation, "custom_data")
+            db.add(quotation)
         self._snapshot(db, quotation, "Initial version")
         audit_log_service.record(
             db,
@@ -101,8 +147,15 @@ class QuotationService:
             action=AuditAction.CREATE,
             entity_type="Quotation",
             entity_id=quotation.id,
-            new_data={"quotation_number": quotation.quotation_number},
+            new_data={"quotation_number": quotation.quotation_number, "status": initial_status.value},
         )
+        if initial_status == QuotationStatus.SENT:
+            notification_service.notify_admins_report_submitted(
+                db,
+                organization_id=current_user.organization_id,
+                quotation=quotation,
+                submitter=current_user,
+            )
         db.commit()
         return self.get(db, current_user, quotation.id)
 
@@ -150,6 +203,117 @@ class QuotationService:
         db.commit()
         return self.get(db, current_user, quotation.id)
 
+    def resubmit(
+        self,
+        db: Session,
+        current_user: User,
+        quotation_id: UUID,
+        payload: QuotationCreate,
+    ) -> Quotation:
+        source = self.get(db, current_user, quotation_id)
+        if source.status != QuotationStatus.REJECTED:
+            raise AppError(
+                "Only rejected reports can be revised and resubmitted",
+                status_code=409,
+                code="invalid_status",
+            )
+        if not _is_admin(current_user) and source.created_by != current_user.id:
+            raise ForbiddenError("You can only resubmit your own reports")
+        source_custom = dict(source.custom_data or {})
+        if source_custom.get("_superseded_by"):
+            raise AppError(
+                "This rejection already has a newer submission",
+                status_code=409,
+                code="already_resubmitted",
+            )
+
+        customer = customer_crud.get_by_org(db, current_user.organization_id, payload.customer_id)
+        if customer is None:
+            raise NotFoundError("Customer not found")
+        template = None
+        if payload.quotation_template_id:
+            template = quotation_template_crud.get_by_org(
+                db, current_user.organization_id, payload.quotation_template_id
+            )
+            if template is None:
+                raise NotFoundError("Quotation template not found")
+
+        lineage = source_custom.get("_report_lineage") or {}
+        display_number = (
+            lineage.get("display_number")
+            or payload.quotation_number
+            or source.quotation_number
+        )
+        root_id = lineage.get("root_id") or str(source.id)
+        prev_revision = int(lineage.get("revision") or 1)
+        new_revision = prev_revision + 1
+        internal_number = self._alloc_resubmit_internal_number(
+            db, current_user.organization_id, display_number, new_revision
+        )
+
+        custom_data = validate_custom_data(
+            db,
+            current_user.organization_id,
+            CustomFieldEntity.QUOTATION,
+            payload.custom_data,
+            allow_unknown=True,
+        )
+        custom_data = _embed_template_snapshot(custom_data, template)
+        custom_data["_report_lineage"] = {
+            "root_id": root_id,
+            "revision": new_revision,
+            "previous_id": str(source.id),
+            "display_number": display_number,
+        }
+
+        quotation = quotation_crud.create(
+            db,
+            {
+                "organization_id": current_user.organization_id,
+                "customer_id": customer.id,
+                "quotation_template_id": template.id if template else None,
+                "created_by": current_user.id,
+                "quotation_number": internal_number,
+                "quotation_date": payload.quotation_date or datetime.now(timezone.utc),
+                "validity_date": payload.validity_date,
+                "status": QuotationStatus.SENT,
+                "discount": payload.discount,
+                "currency": payload.currency,
+                "notes": payload.notes,
+                "custom_data": custom_data,
+            },
+        )
+        self._replace_items(db, current_user, quotation, payload.items)
+        self._recalculate(db, quotation)
+        self._snapshot(db, quotation, f"Resubmitted (rev {new_revision}) from rejected report")
+
+        source_custom["_superseded_by"] = str(quotation.id)
+        source.custom_data = source_custom
+        flag_modified(source, "custom_data")
+        db.add(source)
+
+        audit_log_service.record(
+            db,
+            organization_id=current_user.organization_id,
+            user_id=current_user.id,
+            action=AuditAction.CREATE,
+            entity_type="Quotation",
+            entity_id=quotation.id,
+            new_data={
+                "quotation_number": quotation.quotation_number,
+                "status": QuotationStatus.SENT.value,
+                "resubmitted_from": str(source.id),
+            },
+        )
+        notification_service.notify_admins_report_submitted(
+            db,
+            organization_id=current_user.organization_id,
+            quotation=quotation,
+            submitter=current_user,
+        )
+        db.commit()
+        return self.get(db, current_user, quotation.id)
+
     def change_status(
         self,
         db: Session,
@@ -158,16 +322,51 @@ class QuotationService:
         payload: QuotationStatusUpdate,
     ) -> Quotation:
         quotation = self.get(db, current_user, quotation_id)
-        if not can_transition(quotation.status, payload.status):
+        target = payload.status
+        remark = (payload.remark or "").strip()
+
+        if target == QuotationStatus.REJECTED and not remark:
             raise AppError(
-                f"Cannot change status from {quotation.status.value} to {payload.status.value}",
+                "Remark is required when rejecting a report",
+                status_code=422,
+                code="remark_required",
+            )
+
+        if target in {QuotationStatus.ACCEPTED, QuotationStatus.REJECTED}:
+            if not _is_admin(current_user):
+                raise ForbiddenError("Only admins can accept or reject reports")
+            if quotation.status != QuotationStatus.SENT:
+                raise AppError(
+                    "Only submitted reports can be accepted or rejected",
+                    status_code=409,
+                    code="invalid_status",
+                )
+
+        if target == QuotationStatus.SENT and quotation.status == QuotationStatus.REJECTED:
+            if not _is_admin(current_user) and quotation.created_by != current_user.id:
+                raise ForbiddenError("You can only resubmit your own reports")
+
+        if not can_transition(quotation.status, target):
+            raise AppError(
+                f"Cannot change status from {quotation.status.value} to {target.value}",
                 status_code=409,
                 code="invalid_status_transition",
             )
+
         old_status = quotation.status.value
-        quotation.status = payload.status
+        quotation.status = target
         db.add(quotation)
-        self._snapshot(db, quotation, f"Status changed to {payload.status.value}")
+
+        if target in {QuotationStatus.ACCEPTED, QuotationStatus.REJECTED}:
+            quotation.review_remark = remark or None
+            quotation.reviewed_at = datetime.now(timezone.utc)
+            db.add(quotation)
+
+        summary = f"Status changed to {target.value}"
+        if remark:
+            summary = f"{summary}: {remark}"
+        self._snapshot(db, quotation, summary)
+
         audit_log_service.record(
             db,
             organization_id=current_user.organization_id,
@@ -176,13 +375,40 @@ class QuotationService:
             entity_type="Quotation",
             entity_id=quotation.id,
             old_data={"status": old_status},
-            new_data={"status": payload.status.value},
+            new_data={"status": target.value, "remark": remark or None},
         )
+
+        if target == QuotationStatus.SENT and old_status == QuotationStatus.REJECTED.value:
+            notification_service.notify_admins_report_submitted(
+                db,
+                organization_id=current_user.organization_id,
+                quotation=quotation,
+                submitter=current_user,
+            )
+        elif target == QuotationStatus.ACCEPTED:
+            notification_service.notify_submitter_review(
+                db,
+                organization_id=current_user.organization_id,
+                quotation=quotation,
+                kind=NotificationKind.REPORT_ACCEPTED,
+                message=remark or "Your report was accepted",
+            )
+        elif target == QuotationStatus.REJECTED:
+            notification_service.notify_submitter_review(
+                db,
+                organization_id=current_user.organization_id,
+                quotation=quotation,
+                kind=NotificationKind.REPORT_REJECTED,
+                message=remark,
+            )
+
         db.commit()
         return self.get(db, current_user, quotation.id)
 
     def delete(self, db: Session, current_user: User, quotation_id: UUID) -> None:
         quotation = self.get(db, current_user, quotation_id)
+        if not _is_admin(current_user):
+            raise ForbiddenError("Only admins can delete reports")
         if quotation.status not in {QuotationStatus.DRAFT, QuotationStatus.CANCELLED}:
             raise AppError("Only draft or cancelled quotations can be deleted", status_code=409, code="invalid_status")
         quotation_crud.remove(db, quotation)
@@ -204,6 +430,35 @@ class QuotationService:
         year = datetime.now(timezone.utc).year
         seq = quotation_crud.next_sequence(db, organization_id)
         return f"QT-{year}-{seq:06d}"
+
+    @staticmethod
+    def _ensure_report_lineage(quotation: Quotation, display_number: str) -> None:
+        custom = dict(quotation.custom_data or {})
+        if custom.get("_report_lineage"):
+            return
+        custom["_report_lineage"] = {
+            "root_id": str(quotation.id),
+            "revision": 1,
+            "display_number": display_number,
+        }
+        quotation.custom_data = custom
+
+    def _alloc_resubmit_internal_number(
+        self,
+        db: Session,
+        organization_id: UUID,
+        display_number: str,
+        revision: int,
+    ) -> str:
+        base = (display_number or "report").strip()[:40]
+        attempt = revision
+        while True:
+            suffix = f"-R{attempt}"
+            max_base = 50 - len(suffix)
+            candidate = f"{base[:max_base]}{suffix}"
+            if quotation_crud.get_by_number(db, organization_id, candidate) is None:
+                return candidate
+            attempt += 1
 
     def _replace_items(
         self,
@@ -288,6 +543,7 @@ class QuotationService:
         db.refresh(quotation)
 
     def _snapshot(self, db: Session, quotation: Quotation, change_summary: str) -> None:
+        db.flush()
         db.refresh(quotation)
         next_version = quotation_version_crud.latest_version_number(db, quotation.id) + 1
         snapshot = {

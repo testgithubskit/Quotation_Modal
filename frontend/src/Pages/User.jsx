@@ -1,5 +1,6 @@
 import { Layout } from 'antd';
-import { FilePdfOutlined, PlusSquareOutlined } from '@ant-design/icons';
+import { BellOutlined, FilePdfOutlined, PlusSquareOutlined } from '@ant-design/icons';
+import Notification from './UserComponents/Notification';
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Footer from '../Components/Footer';
 import Navbar from '../Components/Navbar';
@@ -7,23 +8,28 @@ import RequireRole from '../Components/RequireRole';
 import Sidebar from '../Components/sidebar';
 import GenerateReport from './UserComponents/GenerateReport';
 import Reports from './UserComponents/Reports';
+import useNotificationUnreadCount from '../hooks/useNotificationUnreadCount';
 
 const { Content } = Layout;
 
 function UserShell() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { count: notificationCount } = useNotificationUnreadCount(true);
+  const onNotifications = location.pathname.includes('/notifications');
   const onReports = location.pathname.includes('/reports');
-  const selectedKey = onReports ? 'reports' : 'generate';
-  const pageTitle = onReports ? 'Reports' : 'Generate Report';
+  const selectedKey = onNotifications ? 'notifications' : (onReports ? 'reports' : 'generate');
+  const pageTitle = onNotifications ? 'Notifications' : (onReports ? 'Reports' : 'Generate Report');
 
   return (
     <Layout className="flex h-screen overflow-hidden !bg-transparent">
       <Sidebar
         selectedKeys={[selectedKey]}
+        badgeByKey={{ notifications: notificationCount }}
         items={[
           { key: 'generate', icon: <PlusSquareOutlined />, label: 'Generate Report' },
           { key: 'reports', icon: <FilePdfOutlined />, label: 'Reports' },
+          { key: 'notifications', icon: <BellOutlined />, label: 'Notifications' },
         ]}
         onMenuClick={({ key }) => navigate(`/user/${key}`)}
       />
@@ -45,6 +51,10 @@ export default function User() {
         <Route element={<UserShell />}>
           <Route path="generate" element={<GenerateReport />} />
           <Route path="reports" element={<Reports />} />
+          <Route
+            path="notifications"
+            element={<Notification />}
+          />
           <Route index element={<Navigate to="generate" replace />} />
           <Route path="*" element={<Navigate to="generate" replace />} />
         </Route>

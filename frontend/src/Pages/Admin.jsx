@@ -6,7 +6,9 @@ import {
   FileTextOutlined,
   FormOutlined,
   FileDoneOutlined,
+  BellOutlined,
 } from '@ant-design/icons';
+import Notification from './AdminComponents/Notification';
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Footer from '../Components/Footer';
 import Navbar from '../Components/Navbar';
@@ -17,6 +19,7 @@ import Activities from './AdminComponents/Activities';
 import Configuration from './AdminComponents/Configuration';
 import Templates from './AdminComponents/Templates';
 import GeneratedReports from './AdminComponents/GeneratedReports';
+import useNotificationUnreadCount from '../hooks/useNotificationUnreadCount';
 
 const { Content } = Layout;
 
@@ -25,6 +28,7 @@ const PATH_META = [
   ['/admin/report/design', 'report-design', 'Design template'],
   ['/admin/report/generated', 'report-generated', 'Generated Reports'],
   ['/admin/templates', 'report-design', 'Design template'],
+  ['/admin/notifications', 'notifications', 'Notifications'],
   ['/admin/configuration', 'configuration', 'Configuration'],
   ['/admin/customers', 'configuration', 'Configuration'],
   ['/admin', 'dashboard', 'Dashboard'],
@@ -33,6 +37,7 @@ const PATH_META = [
 function AdminShell() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { count: notificationCount } = useNotificationUnreadCount(true);
   const meta = PATH_META.find(([path]) => location.pathname.startsWith(path));
   const selectedKey = meta?.[1] || 'dashboard';
   const pageTitle = meta?.[2] || 'Dashboard';
@@ -41,6 +46,7 @@ function AdminShell() {
     <Layout className="flex h-screen overflow-hidden !bg-transparent">
       <Sidebar
         selectedKeys={[selectedKey]}
+        badgeByKey={{ notifications: notificationCount }}
         items={[
           { key: 'dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
           {
@@ -54,12 +60,14 @@ function AdminShell() {
           },
           { key: 'activities', icon: <AppstoreOutlined />, label: 'Activities' },
           { key: 'configuration', icon: <BankOutlined />, label: 'Configuration' },
+          { key: 'notifications', icon: <BellOutlined />, label: 'Notifications' },
         ]}
         onMenuClick={({ key }) => {
           if (key === 'dashboard') navigate('/admin');
           else if (key === 'report-design') navigate('/admin/report/design');
           else if (key === 'report-generated') navigate('/admin/report/generated');
           else if (key === 'report') navigate('/admin/report/design');
+          else if (key === 'notifications') navigate('/admin/notifications');
           else navigate(`/admin/${key}`);
         }}
       />
@@ -83,6 +91,10 @@ export default function Admin() {
           <Route path="team" element={<Navigate to="/admin/configuration?tab=user" replace />} />
           <Route path="customers" element={<Navigate to="/admin/configuration?tab=customers" replace />} />
           <Route path="activities" element={<Activities />} />
+          <Route
+            path="notifications"
+            element={<Notification />}
+          />
           <Route path="report/design" element={<Templates />} />
           <Route path="report/generated" element={<GeneratedReports />} />
           <Route path="templates" element={<Navigate to="/admin/report/design" replace />} />

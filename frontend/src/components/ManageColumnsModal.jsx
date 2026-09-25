@@ -141,6 +141,10 @@ export default function ManageColumnsModal({
 
   const remove = async (field) => {
     try {
+      if (field.no_hide || field.field_key === 'code') {
+        message.warning('This column cannot be removed');
+        return;
+      }
       if (field.is_builtin) {
         (onHideBuiltin || hideActivityBuiltinColumn)(field.field_key);
         message.success('Column removed from table');
@@ -330,9 +334,11 @@ export default function ManageColumnsModal({
                       onClick={() => setEditingKey(key)}
                     />
                   )}
-                  <Popconfirm title="Remove this column from the table?" onConfirm={() => remove(field)}>
-                    <Button type="text" danger icon={<DeleteOutlined />} />
-                  </Popconfirm>
+                  {field.no_hide || field.field_key === 'code' ? null : (
+                    <Popconfirm title="Remove this column from the table?" onConfirm={() => remove(field)}>
+                      <Button type="text" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  )}
                 </Space>
               );
             },

@@ -26,6 +26,18 @@ def test_signup_login_me_logout_and_refresh(client: TestClient) -> None:
     assert revoked.status_code == 401
 
 
+def test_signup_provisions_default_quotation_template(client: TestClient) -> None:
+    tokens = signup(client)
+    templates = client.get(
+        "/api/v1/quotation-templates",
+        headers=auth_header(tokens["access_token"]),
+    )
+    assert templates.status_code == 200, templates.text
+    items = templates.json().get("items") or []
+    assert len(items) >= 1
+    assert any(item.get("is_default") for item in items)
+
+
 def test_forgot_and_reset_password(client: TestClient) -> None:
     tokens = signup(client)
     forgot = client.post("/api/v1/auth/forgot-password", json={"email": tokens["email"]})

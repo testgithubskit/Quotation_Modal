@@ -14,6 +14,7 @@ from app.routers import (
     auth,
     custom_fields,
     customers,
+    notifications,
     organizations,
     pdf_render,
     permissions,
@@ -86,6 +87,7 @@ app.include_router(
     tags=["Quotation Templates"],
 )
 app.include_router(custom_fields.router, prefix=f"{prefix}/custom-fields", tags=["Custom Fields"])
+app.include_router(notifications.router, prefix=f"{prefix}/notifications", tags=["Notifications"])
 app.include_router(audit_logs.router, prefix=f"{prefix}/audit-logs", tags=["Audit Logs"])
 app.include_router(pdf_render.router, prefix=f"{prefix}/pdf", tags=["PDF"])
 

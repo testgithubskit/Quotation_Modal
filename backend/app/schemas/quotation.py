@@ -75,6 +75,7 @@ class QuotationUpdate(BaseModel):
 
 class QuotationStatusUpdate(BaseModel):
     status: QuotationStatus
+    remark: Optional[str] = None
 
 
 class QuotationResponse(ORMModel):
@@ -93,6 +94,8 @@ class QuotationResponse(ORMModel):
     total: Decimal
     currency: str
     notes: Optional[str]
+    review_remark: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
     custom_data: dict
     items: list[QuotationItemResponse] = Field(default_factory=list)
     created_at: datetime
@@ -113,6 +116,13 @@ class QuotationListResponse(ORMModel):
     total: Decimal
     currency: str
     created_by: UUID
+    created_by_name: Optional[str] = None
+    review_remark: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    report_display_number: Optional[str] = None
+    report_revision: Optional[int] = None
+    superseded_by: Optional[UUID] = None
+    updated_at: datetime
     created_at: datetime
 
 

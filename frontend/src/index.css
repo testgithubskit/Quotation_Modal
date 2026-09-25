@@ -561,6 +561,20 @@
     background: #f0fdfa !important;
   }
 
+  .app-data-table .ant-table-tbody > tr.report-row-highlight > td {
+    background: #ecfdf5 !important;
+    box-shadow: inset 4px 0 0 #14b8a6;
+  }
+
+  .app-data-table .ant-table-tbody > tr.report-row-highlight:hover > td {
+    background: #d1fae5 !important;
+  }
+
+  .app-data-table .ant-table-tbody > tr.report-row-highlight > td.report-actions-col,
+  .app-data-table .ant-table-tbody > tr.report-row-highlight:hover > td.report-actions-col {
+    background: #ecfdf5 !important;
+  }
+
   .manage-columns-table .ant-table-body {
     overflow-y: auto !important;
   }
