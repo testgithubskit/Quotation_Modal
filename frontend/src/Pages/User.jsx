@@ -1,5 +1,5 @@
 import { Layout } from 'antd';
-import { BellOutlined, FilePdfOutlined, PlusSquareOutlined } from '@ant-design/icons';
+import { BellOutlined, FilePdfOutlined } from '@ant-design/icons';
 import Notification from './UserComponents/Notification';
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import Footer from '../Components/Footer';
@@ -17,9 +17,9 @@ function UserShell() {
   const navigate = useNavigate();
   const { count: notificationCount } = useNotificationUnreadCount(true);
   const onNotifications = location.pathname.includes('/notifications');
-  const onReports = location.pathname.includes('/reports');
-  const selectedKey = onNotifications ? 'notifications' : (onReports ? 'reports' : 'generate');
-  const pageTitle = onNotifications ? 'Notifications' : (onReports ? 'Reports' : 'Generate Report');
+  const onGenerate = location.pathname.includes('/generate');
+  const selectedKey = onNotifications ? 'notifications' : 'reports';
+  const pageTitle = onNotifications ? 'Notifications' : (onGenerate ? 'Generate Report' : 'Reports');
 
   return (
     <Layout className="flex h-screen overflow-hidden !bg-transparent">
@@ -27,7 +27,6 @@ function UserShell() {
         selectedKeys={[selectedKey]}
         badgeByKey={{ notifications: notificationCount }}
         items={[
-          { key: 'generate', icon: <PlusSquareOutlined />, label: 'Generate Report' },
           { key: 'reports', icon: <FilePdfOutlined />, label: 'Reports' },
           { key: 'notifications', icon: <BellOutlined />, label: 'Notifications' },
         ]}
@@ -55,8 +54,8 @@ export default function User() {
             path="notifications"
             element={<Notification />}
           />
-          <Route index element={<Navigate to="generate" replace />} />
-          <Route path="*" element={<Navigate to="generate" replace />} />
+          <Route index element={<Navigate to="reports" replace />} />
+          <Route path="*" element={<Navigate to="reports" replace />} />
         </Route>
       </Route>
     </Routes>

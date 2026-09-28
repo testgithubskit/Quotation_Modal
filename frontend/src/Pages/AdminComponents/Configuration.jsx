@@ -248,8 +248,8 @@ export default function Configuration() {
         className="config-tabs min-h-0 flex-1"
         items={[
           { key: 'customers', label: 'Customers', children: <Customers /> },
-          { key: 'org', label: 'Organization Details', children: <OrgDetails /> },
           { key: 'user', label: 'User', children: <Team /> },
+          { key: 'org', label: 'Organization Details', children: <OrgDetails /> },
           { key: 'audit', label: 'Audit logs', children: <AuditLogs /> },
         ]}
       />

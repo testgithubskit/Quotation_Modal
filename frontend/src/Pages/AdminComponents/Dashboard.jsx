@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Col, Row, Spin, Table, Tooltip, Typography, message } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
+import {
+  AppstoreOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  TeamOutlined,
+  UserOutlined,
+} from '@ant-design/icons';
 import QuotationPdfPreviewModal from '../../Components/QuotationPdfPreviewModal.jsx';
 import useQuotationPdfPreview from '../../hooks/useQuotationPdfPreview.js';
 import { useNavigate } from 'react-router-dom';
@@ -8,11 +16,90 @@ import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { slNoColumn } from '../../utils/tableHelpers';
 import { templateForQuotation } from '../../utils/templateSnapshot.js';
-function StatCard({ label, value }) {
+function StatCard({ label, value, icon, boxClass, iconClass, valueClass }) {
   return (
-    <div className="w-full rounded-lg border border-slate-200 border-t-[3px] border-t-teal-600 bg-white p-4 text-left shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-teal-700">{value}</div>
+    <div className={`flex items-center justify-between rounded-lg border bg-white px-4 py-3 shadow-sm ${boxClass}`}>
+      <div className="min-w-0">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+        <div className={`mt-1 text-2xl font-semibold leading-none ${valueClass}`}>{value}</div>
+      </div>
+      <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-base ${iconClass}`}>
+        {icon}
+      </span>
+    </div>
+  );
+}
+
+function pieSlicePath(cx, cy, r, startAngle, endAngle) {
+  const toPoint = (angle) => {
+    const rad = ((angle - 90) * Math.PI) / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  };
+  const [x1, y1] = toPoint(startAngle);
+  const [x2, y2] = toPoint(endAngle);
+  const large = endAngle - startAngle > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`;
+}
+
+function StatusChart({ items }) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  const slices = [];
+  let cursor = 0;
+  items.forEach((item) => {
+    if (!item.value || !total) return;
+    const sweep = (item.value / total) * 360;
+    slices.push({ ...item, start: cursor, end: cursor + sweep });
+    cursor += sweep;
+  });
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-6">
+      <svg viewBox="0 0 120 120" className="h-40 w-40 shrink-0" role="img" aria-label="Reports by status">
+        {total === 0 ? (
+          <circle cx="60" cy="60" r="52" fill="#e2e8f0" />
+        ) : slices.map((slice) => (
+          slice.end - slice.start >= 359.9 ? (
+            <circle key={slice.label} cx="60" cy="60" r="52" fill={slice.color} />
+          ) : (
+            <path
+              key={slice.label}
+              d={pieSlicePath(60, 60, 52, slice.start, slice.end)}
+              fill={slice.color}
+            />
+          )
+        ))}
+      </svg>
+      <div className="flex min-w-[140px] flex-col gap-2">
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-4 text-xs text-slate-600">
+            <span className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+              {item.label}
+            </span>
+            <span className="font-semibold text-slate-800">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MonthChart({ items }) {
+  const max = Math.max(1, ...items.map((item) => item.count));
+  return (
+    <div className="flex h-44 items-end gap-2">
+      {items.map((item) => (
+        <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+          <span className="text-xs font-medium text-slate-600">{item.count}</span>
+          <div className="flex h-32 w-full items-end">
+            <div
+              className="w-full rounded-t-md bg-teal-500"
+              style={{ height: `${Math.max(item.count ? 8 : 2, (item.count / max) * 100)}%` }}
+            />
+          </div>
+          <span className="text-[11px] text-slate-500">{item.label}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -63,6 +150,28 @@ export default function Dashboard() {
 
   const recent = useMemo(() => quotations.slice(0, 5), [quotations]);
 
+  const statusSummary = useMemo(() => {
+    const count = (status) => quotations.filter((q) => q.status === status).length;
+    return {
+      pending: count('SENT'),
+      accepted: count('ACCEPTED'),
+      rejected: count('REJECTED'),
+    };
+  }, [quotations]);
+
+  const monthlySubmissions = useMemo(() => {
+    const months = [];
+    for (let i = 5; i >= 0; i -= 1) {
+      const month = dayjs().subtract(i, 'month');
+      const key = month.format('YYYY-MM');
+      months.push({
+        label: month.format('MMM'),
+        count: quotations.filter((q) => dayjs(q.created_at || q.quotation_date).format('YYYY-MM') === key).length,
+      });
+    }
+    return months;
+  }, [quotations]);
+
   const openPreview = async (record) => {
     setBusyId(record.id);
     try {
@@ -104,21 +213,87 @@ export default function Dashboard() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto">
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Users" value={users.length} />
+      <Row gutter={[12, 12]}>
+        <Col xs={24} sm={12} xl={4}>
+          <StatCard
+            label="Users"
+            value={users.length}
+            icon={<UserOutlined />}
+            boxClass="border-blue-300 bg-blue-50/70"
+            iconClass="bg-blue-100 text-blue-600"
+            valueClass="text-blue-700"
+          />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Customers" value={customers.length} />
+        <Col xs={24} sm={12} xl={4}>
+          <StatCard
+            label="Customers"
+            value={customers.length}
+            icon={<TeamOutlined />}
+            boxClass="border-orange-300 bg-orange-50/80"
+            iconClass="bg-orange-100 text-orange-600"
+            valueClass="text-orange-700"
+          />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <StatCard label="Activities" value={activities.length} />
+        <Col xs={24} sm={12} xl={4}>
+          <StatCard
+            label="Activities"
+            value={activities.length}
+            icon={<AppstoreOutlined />}
+            boxClass="border-sky-300 bg-sky-50/80"
+            iconClass="bg-sky-100 text-sky-600"
+            valueClass="text-sky-700"
+          />
         </Col>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} sm={12} xl={4}>
           <StatCard
             label="Quotations"
             value={quotations.length}
+            icon={<FileTextOutlined />}
+            boxClass="border-emerald-300 bg-emerald-50/80"
+            iconClass="bg-emerald-100 text-emerald-600"
+            valueClass="text-emerald-700"
           />
+        </Col>
+        <Col xs={24} sm={12} xl={4}>
+          <StatCard
+            label="Accepted"
+            value={statusSummary.accepted}
+            icon={<CheckCircleOutlined />}
+            boxClass="border-green-300 bg-green-50/80"
+            iconClass="bg-green-100 text-green-600"
+            valueClass="text-green-700"
+          />
+        </Col>
+        <Col xs={24} sm={12} xl={4}>
+          <StatCard
+            label="Rejected"
+            value={statusSummary.rejected}
+            icon={<CloseCircleOutlined />}
+            boxClass="border-rose-300 bg-rose-50/80"
+            iconClass="bg-rose-100 text-rose-600"
+            valueClass="text-rose-700"
+          />
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={12}>
+          <div className="h-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <Typography.Title level={5} className="!mb-4 !text-sm">Reports by status</Typography.Title>
+            <StatusChart
+              items={[
+                { label: 'Pending', value: statusSummary.pending, color: '#3b82f6' },
+                { label: 'Accepted', value: statusSummary.accepted, color: '#16a34a' },
+                { label: 'Rejected', value: statusSummary.rejected, color: '#e11d48' },
+              ]}
+            />
+          </div>
+        </Col>
+        <Col xs={24} lg={12}>
+          <div className="h-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <Typography.Title level={5} className="!mb-4 !text-sm">Reports submitted (last 6 months)</Typography.Title>
+            <MonthChart items={monthlySubmissions} />
+          </div>
         </Col>
       </Row>
 

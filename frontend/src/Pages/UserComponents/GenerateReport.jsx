@@ -3,7 +3,7 @@ import {
   Typography, Form, Row, Col, Button, Space,
   Input, InputNumber, Select, Tooltip, message,
 } from 'antd';
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { templateForQuotation } from '../../utils/templateSnapshot.js';
 import dayjs from 'dayjs';
@@ -818,10 +818,13 @@ export default function GenerateReport() {
       </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="border-b border-slate-200 px-6 py-4">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <Typography.Title level={5} className="!mb-0 !text-sm !font-semibold !uppercase !tracking-wide !text-slate-700">
             {steps[step]?.title}
           </Typography.Title>
+          <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user/reports')}>
+            Back
+          </Button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
@@ -1003,7 +1006,7 @@ export default function GenerateReport() {
           <div>
             {step > 0 ? (
               <Button size="large" onClick={() => setStep((s) => s - 1)}>
-                Back
+                Previous
               </Button>
             ) : null}
           </div>

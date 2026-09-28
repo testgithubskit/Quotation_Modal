@@ -20,7 +20,7 @@ const AuthContext = createContext(null);
 
 export function homePathForUser(user) {
   if (!user) return '/login';
-  if (user.role_name === 'USER') return '/user/generate';
+  if (user.role_name === 'USER') return '/user/reports';
   return '/admin';
 }
 

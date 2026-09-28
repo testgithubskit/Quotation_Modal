@@ -4,7 +4,7 @@ import {
 } from 'antd';
 import {
   AppstoreOutlined, DeleteOutlined, DownloadOutlined, EditOutlined,
-  EyeOutlined, FileExcelOutlined, FilePdfOutlined, FileTextOutlined, ReloadOutlined,
+  EyeOutlined, FileExcelOutlined, FilePdfOutlined, FileTextOutlined, PlusOutlined, ReloadOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -293,6 +293,7 @@ export default function GeneratedReportsTable({
   enableReview = false,
   allowDelete = true,
   revisePath = '/user/generate',
+  generatePath = '',
 }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -606,6 +607,16 @@ export default function GeneratedReportsTable({
             aria-label="Refresh"
           />
         </Tooltip>
+        {generatePath ? (
+          <Button
+            type="primary"
+            className="ml-auto"
+            icon={<PlusOutlined />}
+            onClick={() => navigate(generatePath)}
+          >
+            Generate Report
+          </Button>
+        ) : null}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
