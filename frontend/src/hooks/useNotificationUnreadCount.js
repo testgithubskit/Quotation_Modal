@@ -1,33 +1,64 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../config/auth.js';
 
-const POLL_MS = 45_000;
+/** One fetch per full page load; shared across remounts / Strict Mode. */
+let cachedCount = 0;
+let hasLoaded = false;
+let inFlight = null;
 
+function fetchUnreadCount() {
+  if (inFlight) return inFlight;
+  inFlight = api
+    .get('/notifications/unread-count')
+    .then(({ data }) => {
+      cachedCount = Number(data?.count) || 0;
+      hasLoaded = true;
+      return cachedCount;
+    })
+    .finally(() => {
+      inFlight = null;
+    });
+  return inFlight;
+}
+
+/**
+ * Unread badge count: loads once when the app shell mounts.
+ * Refreshes only after `notifications-changed` (e.g. acknowledge).
+ */
 export default function useNotificationUnreadCount(active = true) {
-  const [count, setCount] = useState(0);
+  const [count, setCount] = useState(() => (hasLoaded ? cachedCount : 0));
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force = false) => {
+    if (!force && hasLoaded) {
+      setCount(cachedCount);
+      return cachedCount;
+    }
     try {
-      const { data } = await api.get('/notifications/unread-count');
-      setCount(Number(data?.count) || 0);
+      const next = await fetchUnreadCount();
+      setCount(next);
+      return next;
     } catch {
-      /* ignore — menu badge is non-critical */
+      /* badge is non-critical */
+      return cachedCount;
     }
   }, []);
 
   useEffect(() => {
     if (!active) return undefined;
-    refresh();
-    const timer = window.setInterval(refresh, POLL_MS);
-    const onFocus = () => refresh();
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('notifications-changed', onFocus);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('notifications-changed', onFocus);
+
+    if (hasLoaded) {
+      setCount(cachedCount);
+    } else {
+      refresh(false);
+    }
+
+    const onChanged = () => {
+      hasLoaded = false;
+      refresh(true);
     };
+    window.addEventListener('notifications-changed', onChanged);
+    return () => window.removeEventListener('notifications-changed', onChanged);
   }, [active, refresh]);
 
-  return { count, refresh };
+  return { count, refresh: () => refresh(true) };
 }

@@ -4,7 +4,7 @@ import {
 } from 'antd';
 import {
   AppstoreOutlined, DeleteOutlined, DownloadOutlined, EditOutlined,
-  EyeOutlined, FileExcelOutlined, FilePdfOutlined, FileTextOutlined, PlusOutlined, ReloadOutlined,
+  FileExcelOutlined, FilePdfOutlined, FileTextOutlined, PlusOutlined, ReloadOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -680,14 +680,20 @@ export default function GeneratedReportsTable({
                     </button>
                     <Space size={0} onClick={(e) => e.stopPropagation()}>
                       {enableReview ? (
-                        <AdminReportActions
-                          record={record}
-                          showReview
-                          viewLoading={busyId === record.id}
-                          onView={() => openPreview(record)}
-                          onApprove={() => setReviewModal({ quotation: record, decision: 'ACCEPTED' })}
-                          onReject={() => setReviewModal({ quotation: record, decision: 'REJECTED' })}
-                        />
+                        <>
+                          <PrintMenu
+                            size="middle"
+                            loading={busyId === record.id || pdfDownloading}
+                            onPdf={() => withContext(record, (c) => downloadPdf(c))}
+                            onExcel={() => withContext(record, (c) => downloadExcel(c))}
+                          />
+                          <AdminReportActions
+                            record={record}
+                            showReview
+                            onApprove={() => setReviewModal({ quotation: record, decision: 'ACCEPTED' })}
+                            onReject={() => setReviewModal({ quotation: record, decision: 'REJECTED' })}
+                          />
+                        </>
                       ) : (
                         <PrintMenu
                           loading={busyId === record.id || pdfDownloading}
@@ -695,17 +701,6 @@ export default function GeneratedReportsTable({
                           onExcel={() => withContext(record, (c) => downloadExcel(c))}
                         />
                       )}
-                      {!enableReview ? (
-                        <Tooltip title="Preview">
-                          <Button
-                            type="text"
-                            size="small"
-                            icon={<EyeOutlined />}
-                            loading={busyId === record.id}
-                            onClick={() => openPreview(record)}
-                          />
-                        </Tooltip>
-                      ) : null}
                       {canReviseReport(record) && !allowDelete ? (
                         <Tooltip title="Revise & resubmit">
                           <Button
@@ -820,37 +815,25 @@ export default function GeneratedReportsTable({
                   <Space size={0} wrap={false} className="report-actions-cell">
                     {enableReview ? (
                       <>
-                        <AdminReportActions
-                          record={record}
-                          showReview
-                          viewLoading={busyId === record.id}
-                          onView={() => openPreview(record)}
-                          onApprove={() => setReviewModal({ quotation: record, decision: 'ACCEPTED' })}
-                          onReject={() => setReviewModal({ quotation: record, decision: 'REJECTED' })}
-                        />
                         <PrintMenu
                           size="middle"
                           loading={busyId === record.id || pdfDownloading}
                           onPdf={() => withContext(record, (c) => downloadPdf(c))}
                           onExcel={() => withContext(record, (c) => downloadExcel(c))}
                         />
-                      </>
-                    ) : (
-                      <>
-                        <Tooltip title="Preview">
-                          <Button
-                            type="text"
-                            icon={<EyeOutlined />}
-                            loading={busyId === record.id}
-                            onClick={() => openPreview(record)}
-                          />
-                        </Tooltip>
-                        <PrintMenu
-                          loading={busyId === record.id || pdfDownloading}
-                          onPdf={() => withContext(record, (c) => downloadPdf(c))}
-                          onExcel={() => withContext(record, (c) => downloadExcel(c))}
+                        <AdminReportActions
+                          record={record}
+                          showReview
+                          onApprove={() => setReviewModal({ quotation: record, decision: 'ACCEPTED' })}
+                          onReject={() => setReviewModal({ quotation: record, decision: 'REJECTED' })}
                         />
                       </>
+                    ) : (
+                      <PrintMenu
+                        loading={busyId === record.id || pdfDownloading}
+                        onPdf={() => withContext(record, (c) => downloadPdf(c))}
+                        onExcel={() => withContext(record, (c) => downloadExcel(c))}
+                      />
                     )}
                     {canReviseReport(record) && !allowDelete ? (
                       <Tooltip title="Revise & resubmit">
