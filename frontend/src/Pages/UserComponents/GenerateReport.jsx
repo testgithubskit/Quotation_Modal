@@ -25,11 +25,6 @@ const UNIT_SELECT_OPTIONS = [
   { value: 'Other', label: 'Other' },
 ];
 
-const BASE_STEPS = [
-  { title: 'Report and Customer details' },
-  { title: 'Activity' },
-];
-
 let uid = 0;
 const nextKey = () => `k${Date.now()}${uid++}`;
 
@@ -62,7 +57,6 @@ export default function GenerateReport() {
   const [activeKey, setActiveKey] = useState(() => items[0]?.key);
   const [saving, setSaving] = useState(false);
   const [organization, setOrganization] = useState(null);
-  const [step, setStep] = useState(0);
   const pendingPayloadRef = useRef(null);
   const pdfPreview = useQuotationPdfPreview();
   const [activityNotes, setActivityNotes] = useState([
@@ -75,10 +69,6 @@ export default function GenerateReport() {
     () => resolveTemplateExtraFields(starredTemplate),
     [starredTemplate],
   );
-  const steps = useMemo(() => {
-    if (!templateExtraFields.length) return BASE_STEPS;
-    return [...BASE_STEPS, { title: 'Additional details' }];
-  }, [templateExtraFields.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -572,58 +562,7 @@ export default function GenerateReport() {
     await submitPayload(payload);
   };
 
-  const clearStep = () => {
-    if (step === 0) {
-      form.setFieldsValue({
-        reportNo: undefined,
-        date: undefined,
-        subject: undefined,
-        customerId: undefined,
-        contactPerson: undefined,
-        companyName: undefined,
-        mobileNumber: undefined,
-        emailId: undefined,
-      });
-      return;
-    }
-    if (step === 1) {
-      const fresh = emptyItem();
-      setItems([fresh]);
-      setActiveKey(fresh.key);
-      setActivityNotes([{ key: nextKey(), value: '' }]);
-      setTermsLines([{ key: nextKey(), value: '' }]);
-      return;
-    }
-    const extra = {};
-    templateExtraFields.forEach((f) => {
-      extra[f.key] = undefined;
-    });
-    form.setFieldsValue(extra);
-  };
 
-  const goNext = async () => {
-    if (step === 0) {
-      await form.validateFields(['reportNo', 'date', 'subject', 'customerId', 'mobileNumber']);
-      setStep(1);
-      return;
-    }
-    if (step === 1) {
-      const validItems = items.filter((r) => r.sampleActivity || r.activityId);
-      if (validItems.length === 0) {
-        message.error('Please add at least one item');
-        return;
-      }
-      if (templateExtraFields.length) {
-        setStep(2);
-        return;
-      }
-      handlePreview();
-      return;
-    }
-    const extraNames = templateExtraFields.filter((f) => f.required).map((f) => f.key);
-    if (extraNames.length) await form.validateFields(extraNames);
-    handlePreview();
-  };
 
   const renderCustomFieldCell = (row, field, isSub, parentKey) => {
     const val = row.customFields?.[field.key] ?? '';
@@ -813,32 +752,11 @@ export default function GenerateReport() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <aside className="w-56 shrink-0 border-r border-slate-200 bg-slate-50">
-        {steps.map((item, index) => {
-          const active = step === index;
-          return (
-            <div
-              key={item.title}
-              className={[
-                'border-b border-slate-200 px-4 py-3 text-sm last:border-b-0',
-                active
-                  ? 'border-l-4 border-l-teal-600 bg-white font-semibold text-teal-800'
-                  : 'border-l-4 border-l-transparent text-slate-600',
-              ].join(' ')}
-            >
-              <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-                Step {index + 1}
-              </span>
-              {item.title}
-            </div>
-          );
-        })}
-      </aside>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <Typography.Title level={5} className="!mb-0 !text-sm !font-semibold !uppercase !tracking-wide !text-slate-700">
-            {steps[step]?.title}
+            Generate Quotation Report
           </Typography.Title>
           <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/user/reports')}>
             Back
@@ -847,22 +765,23 @@ export default function GenerateReport() {
 
         <div className="min-h-0 flex-1 overflow-auto px-6 py-5">
         <Form form={form} layout="vertical" initialValues={{ date: dayjs() }}>
-          <div className={step === 0 ? 'block' : 'hidden'}>
+          <div className="mb-6">
           <Row gutter={16}>
             {headerFields.map((field) => (
-              <Col xs={24} sm={12} key={field.key}>
+              <Col xs={24} sm={6} key={field.key}>
                 <DynamicFormField field={field} />
               </Col>
             ))}
+            <Col xs={24} sm={12}>
+              <Form.Item
+                name="subject"
+                label="Subject"
+                rules={[{ required: true, message: 'Enter subject' }]}
+              >
+                <Input placeholder="e.g. Quotation for the Calibration charges of Slip Gauges, Angle Gauges" />
+              </Form.Item>
+            </Col>
           </Row>
-
-          <Form.Item
-            name="subject"
-            label="Subject"
-            rules={[{ required: true, message: 'Enter subject' }]}
-          >
-            <Input placeholder="e.g. Quotation for the Calibration charges of Slip Gauges, Angle Gauges" />
-          </Form.Item>
 
           <Row gutter={16}>
             <Col xs={24} sm={12} md={6}>
@@ -920,7 +839,7 @@ export default function GenerateReport() {
           </Row>
           </div>
 
-          <div className={step === 1 ? 'block' : 'hidden'}>
+          <div className="mb-6">
           <div className="mb-3 flex items-center justify-between">
             <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
               Items/Activities
@@ -980,51 +899,59 @@ export default function GenerateReport() {
             </table>
           </div>
 
-          <div className="mb-3 mt-6 flex items-center justify-between gap-4">
-            <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
-              Activity Notes
-            </Typography.Title>
-            <Button icon={<PlusOutlined />} onClick={addNote}>Add Note</Button>
-          </div>
+          <Row gutter={16}>
+            <Col xs={24} sm={12}>
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
+                  Activity Notes
+                </Typography.Title>
+                <Button icon={<PlusOutlined />} onClick={addNote}>Add Note</Button>
+              </div>
 
-          {activityNotes.map((note, idx) => (
-            <div key={note.key} className="mb-2 flex gap-2">
-              <Input
-                className="flex-1"
-                placeholder={idx === 0 ? 'Quoted price are per each qty / Parameter.' : 'Enter activity note'}
-                value={note.value}
-                onChange={(e) => updateNote(note.key, e.target.value)}
-              />
-              {activityNotes.length > 1 && (
-                <Button danger icon={<DeleteOutlined />} onClick={() => removeNote(note.key)} />
-              )}
-            </div>
-          ))}
+              {activityNotes.map((note, idx) => (
+                <div key={note.key} className="mb-2 flex gap-2">
+                  <Input
+                    className="flex-1"
+                    placeholder={idx === 0 ? 'Quoted price are per each qty / Parameter.' : 'Enter activity note'}
+                    value={note.value}
+                    onChange={(e) => updateNote(note.key, e.target.value)}
+                  />
+                  {activityNotes.length > 1 && (
+                    <Button danger icon={<DeleteOutlined />} onClick={() => removeNote(note.key)} />
+                  )}
+                </div>
+              ))}
+            </Col>
+            <Col xs={24} sm={12}>
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
+                  Terms and Conditions
+                </Typography.Title>
+                <Button icon={<PlusOutlined />} onClick={addTerm}>Add term</Button>
+              </div>
 
-          <div className="mb-3 mt-6 flex items-center justify-between gap-4">
-            <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
-              Terms and Conditions
-            </Typography.Title>
-            <Button icon={<PlusOutlined />} onClick={addTerm}>Add term</Button>
-          </div>
-
-          {termsLines.map((term, idx) => (
-            <div key={term.key} className="mb-2 flex gap-2">
-              <Input
-                className="flex-1"
-                placeholder={idx === 0 ? 'Enter terms and conditions' : 'Enter another term'}
-                value={term.value}
-                onChange={(e) => updateTerm(term.key, e.target.value)}
-              />
-              {termsLines.length > 1 && (
-                <Button danger icon={<DeleteOutlined />} onClick={() => removeTerm(term.key)} />
-              )}
-            </div>
-          ))}
+              {termsLines.map((term, idx) => (
+                <div key={term.key} className="mb-2 flex gap-2">
+                  <Input
+                    className="flex-1"
+                    placeholder={idx === 0 ? 'Enter terms and conditions' : 'Enter another term'}
+                    value={term.value}
+                    onChange={(e) => updateTerm(term.key, e.target.value)}
+                  />
+                  {termsLines.length > 1 && (
+                    <Button danger icon={<DeleteOutlined />} onClick={() => removeTerm(term.key)} />
+                  )}
+                </div>
+              ))}
+            </Col>
+          </Row>
           </div>
 
           {templateExtraFields.length > 0 ? (
-            <div className={step === 2 ? 'block' : 'hidden'}>
+            <div className="mb-6">
+              <Typography.Title level={5} className="!mb-4 !text-[15px] !font-semibold !text-slate-800">
+                Additional Details
+              </Typography.Title>
               <Row gutter={16}>
                 {templateExtraFields.map((field) => (
                   <Col xs={24} sm={12} key={field.key}>
@@ -1037,25 +964,15 @@ export default function GenerateReport() {
         </Form>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-6 py-4">
-          <div>
-            {step > 0 ? (
-              <Button size="large" onClick={() => setStep((s) => s - 1)}>
-                Previous
-              </Button>
-            ) : null}
-          </div>
-          <div className="flex gap-3">
-            <Button size="large" onClick={clearStep}>Clear</Button>
-            <Button
-              type="primary"
-              size="large"
-              loading={step === steps.length - 1 ? pdfPreview.loading : false}
-              onClick={goNext}
-            >
-              {step === steps.length - 1 ? 'Preview' : 'Next'}
-            </Button>
-          </div>
+        <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
+          <Button
+            type="primary"
+            size="large"
+            loading={pdfPreview.loading}
+            onClick={handlePreview}
+          >
+            Preview & Submit
+          </Button>
         </div>
       </div>
 

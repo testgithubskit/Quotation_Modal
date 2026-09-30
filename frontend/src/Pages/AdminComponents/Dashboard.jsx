@@ -16,6 +16,7 @@ import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { slNoColumn } from '../../utils/tableHelpers';
 import { templateForQuotation } from '../../utils/templateSnapshot.js';
+
 function StatCard({ label, value, icon, boxClass, iconClass, valueClass }) {
   return (
     <div className={`flex items-center justify-between rounded-lg border bg-white px-4 py-3 shadow-sm ${boxClass}`}>
@@ -48,10 +49,12 @@ function StatusChart({ items }) {
   items.forEach((item) => {
     if (!item.value || !total) return;
     const sweep = (item.value / total) * 360;
-    const pct = total ? Math.round((item.value / total) * 100) : 0;
+    const pct = Math.round((item.value / total) * 100);
     slices.push({ ...item, start: cursor, end: cursor + sweep, pct });
     cursor += sweep;
   });
+
+  const tipFor = (s) => `${s.label}: ${s.value} report${s.value === 1 ? '' : 's'} · ${s.pct}% of total`;
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-4">
@@ -59,39 +62,34 @@ function StatusChart({ items }) {
         {total === 0 ? (
           <circle cx="60" cy="60" r="52" fill="#e2e8f0" />
         ) : slices.map((slice) => {
-          const title = `${slice.label}: ${slice.value} (${slice.pct}%)`;
           if (slice.end - slice.start >= 359.9) {
             return (
-              <circle key={slice.label} cx="60" cy="60" r="52" fill={slice.color} className="cursor-pointer">
-                <title>{title}</title>
-              </circle>
+              <Tooltip key={slice.label} title={tipFor(slice)}>
+                <circle cx="60" cy="60" r="52" fill={slice.color} className="cursor-pointer" />
+              </Tooltip>
             );
           }
           return (
-            <path
-              key={slice.label}
-              d={pieSlicePath(60, 60, 52, slice.start, slice.end)}
-              fill={slice.color}
-              className="cursor-pointer"
-            >
-              <title>{title}</title>
-            </path>
+            <Tooltip key={slice.label} title={tipFor(slice)}>
+              <path
+                d={pieSlicePath(60, 60, 52, slice.start, slice.end)}
+                fill={slice.color}
+                className="cursor-pointer transition-opacity hover:opacity-80"
+              />
+            </Tooltip>
           );
         })}
       </svg>
       <div className="flex min-w-[120px] flex-col gap-2">
-        {items.map((item) => {
-          const pct = total ? Math.round((item.value / total) * 100) : 0;
-          return (
-            <div key={item.label} className="flex items-center justify-between gap-3 text-xs text-slate-600">
-              <span className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
-                {item.label}
-              </span>
-              <span className="font-semibold text-slate-800">{item.value} · {pct}%</span>
-            </div>
-          );
-        })}
+        {items.map((item) => (
+          <div key={item.label} className="flex items-center justify-between gap-3 text-xs text-slate-600">
+            <span className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+              {item.label}
+            </span>
+            <span className="font-semibold text-slate-800">{item.value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -99,25 +97,53 @@ function StatusChart({ items }) {
 
 function MonthChart({ items }) {
   const max = Math.max(1, ...items.map((item) => item.count));
-  const yearTotal = items.reduce((sum, item) => sum + item.count, 0);
   return (
-    <div className="flex h-44 items-end gap-1.5">
+    <div className="flex h-44 items-end gap-1.5 border-b border-slate-200">
       {items.map((item) => {
-        const pct = yearTotal ? Math.round((item.count / yearTotal) * 100) : 0;
-        const tip = `${item.fullLabel}: ${item.count} report${item.count === 1 ? '' : 's'} · ${pct}% of ${item.year}`;
+        const empty = item.count === 0;
+        const tip = (
+          <div className="min-w-[160px] text-xs">
+            <div className="mb-1 font-semibold">{item.fullLabel}</div>
+            {empty ? (
+              <div className="opacity-80">No reports submitted</div>
+            ) : (
+              <>
+                <div className="flex justify-between gap-4">
+                  <span>Total reports</span>
+                  <span className="font-semibold">{item.count}</span>
+                </div>
+                <div className="my-1 border-t border-white/20" />
+                <div className="flex justify-between gap-4">
+                  <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-blue-500" />Pending</span>
+                  <span>{item.pending}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-green-500" />Accepted</span>
+                  <span>{item.accepted}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span><span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-rose-500" />Rejected</span>
+                  <span>{item.rejected}</span>
+                </div>
+              </>
+            )}
+          </div>
+        );
         return (
-          <Tooltip key={item.label} title={tip}>
-            <div className="flex h-full min-w-0 flex-1 cursor-pointer flex-col items-center justify-end gap-1">
-              <span className="text-[10px] font-medium text-slate-600">{item.count || ''}</span>
-              <div className="flex h-32 w-full items-end">
+          <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
+            <span className="text-[10px] font-medium text-slate-600">{item.count || ''}</span>
+            <div className="flex h-32 w-full items-end">
+              <Tooltip title={tip} placement="top">
                 <div
-                  className="w-full rounded-t-md bg-teal-500 transition hover:bg-teal-600"
-                  style={{ height: `${Math.max(item.count ? 8 : 2, (item.count / max) * 100)}%` }}
+                  className={`w-full cursor-pointer rounded-t-md transition ${
+                    empty ? 'bg-slate-200 hover:bg-slate-300' : 'bg-teal-500 hover:bg-teal-600'
+                  }`}
+                  style={{ height: empty ? '4px' : `${Math.max(8, (item.count / max) * 100)}%` }}
                 />
-              </div>
-              <span className="text-[10px] text-slate-500">{item.label}</span>
+              </Tooltip>
             </div>
-          </Tooltip>
+            <span className="pb-1 text-[10px] text-slate-500">{item.label}</span>
+          </div>
         );
       })}
     </div>
@@ -184,11 +210,16 @@ export default function Dashboard() {
     return Array.from({ length: 12 }, (_, i) => {
       const month = dayjs().year(year).month(i).startOf('month');
       const key = month.format('YYYY-MM');
+      const inMonth = quotations.filter((q) => dayjs(q.created_at || q.quotation_date).format('YYYY-MM') === key);
+      const byStatus = (status) => inMonth.filter((q) => q.status === status).length;
       return {
         label: month.format('MMM'),
         fullLabel: month.format('MMMM YYYY'),
         year: String(year),
-        count: quotations.filter((q) => dayjs(q.created_at || q.quotation_date).format('YYYY-MM') === key).length,
+        count: inMonth.length,
+        pending: byStatus('SENT'),
+        accepted: byStatus('ACCEPTED'),
+        rejected: byStatus('REJECTED'),
       };
     });
   }, [quotations]);
