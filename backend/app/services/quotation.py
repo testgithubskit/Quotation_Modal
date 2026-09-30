@@ -360,6 +360,7 @@ class QuotationService:
         if target in {QuotationStatus.ACCEPTED, QuotationStatus.REJECTED}:
             quotation.review_remark = remark or None
             quotation.reviewed_at = datetime.now(timezone.utc)
+            quotation.reviewed_by = current_user.id
             db.add(quotation)
 
         summary = f"Status changed to {target.value}"

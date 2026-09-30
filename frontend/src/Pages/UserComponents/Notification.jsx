@@ -65,6 +65,7 @@ const NOTIFICATION_SEARCH_KEYS = [
   'quotation_number',
   'customer_name',
   'review_remark',
+  'reviewed_by_name',
   'message',
   (r) => workflowStatusLabel(r.quotation_status),
   (r) => (r.submitted_at ? dayjs(r.submitted_at).format('DD MMM YYYY, HH:mm:ss') : ''),
@@ -181,6 +182,11 @@ export default function Notification() {
       dataIndex: 'review_remark',
       ellipsis: true,
       render: (v) => (v ? <span title={v}>{v}</span> : '—'),
+    },
+    {
+      title: 'Reviewed by',
+      dataIndex: 'reviewed_by_name',
+      render: (v) => v || '—',
     },
     {
       title: 'Acknowledge',

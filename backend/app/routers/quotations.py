@@ -24,12 +24,15 @@ def _serialize_quotation_list(db: DbSession, items: list) -> list[QuotationListR
     if not items:
         return []
     creator_ids = {q.created_by for q in items}
-    creators = list(db.scalars(select(User).where(User.id.in_(creator_ids))).all())
-    names_by_id = {u.id: u.full_name for u in creators}
+    reviewer_ids = {q.reviewed_by for q in items if q.reviewed_by}
+    user_ids = creator_ids | reviewer_ids
+    users = list(db.scalars(select(User).where(User.id.in_(user_ids))).all()) if user_ids else []
+    names_by_id = {u.id: u.full_name for u in users}
     out: list[QuotationListResponse] = []
     for item in items:
         payload = QuotationListResponse.model_validate(item).model_dump()
         payload["created_by_name"] = names_by_id.get(item.created_by) or ""
+        payload["reviewed_by_name"] = names_by_id.get(item.reviewed_by) if item.reviewed_by else None
         custom = item.custom_data or {}
         lineage = custom.get("_report_lineage") or {}
         payload["report_display_number"] = lineage.get("display_number") or item.quotation_number

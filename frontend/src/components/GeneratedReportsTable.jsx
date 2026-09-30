@@ -321,6 +321,8 @@ export default function GeneratedReportsTable({
       status: updated.status ?? row.status,
       review_remark: updated.review_remark ?? row.review_remark,
       reviewed_at: updated.reviewed_at ?? row.reviewed_at,
+      reviewed_by: updated.reviewed_by ?? row.reviewed_by,
+      reviewed_by_name: updated.reviewed_by_name ?? row.reviewed_by_name,
     };
   };
 
@@ -406,6 +408,7 @@ export default function GeneratedReportsTable({
       'status',
       'notes',
       'review_remark',
+      'reviewed_by_name',
       'created_by_name',
       (row) => customersById[row.customer_id]?.name,
       (row) => customersById[row.customer_id]?.company,
@@ -799,6 +802,11 @@ export default function GeneratedReportsTable({
                     ? <span title={r.review_remark}>{r.review_remark}</span>
                     : '—'
                 ),
+              },
+              {
+                title: 'Reviewed by',
+                key: 'reviewed_by',
+                render: (_, r) => r.reviewed_by_name || '—',
               },
               {
                 title: 'Total',

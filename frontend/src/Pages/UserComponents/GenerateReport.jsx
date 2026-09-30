@@ -68,6 +68,7 @@ export default function GenerateReport() {
   const [activityNotes, setActivityNotes] = useState([
     { key: nextKey(), value: 'Quoted price are per each qty / Parameter.' },
   ]);
+  const [termsLines, setTermsLines] = useState([{ key: nextKey(), value: '' }]);
 
   const headerFields = DEFAULT_REPORT_HEADER_FIELDS;
   const templateExtraFields = useMemo(
@@ -128,9 +129,20 @@ export default function GenerateReport() {
             companyName: cd.companyName,
             mobileNumber: cd.mobileNumber,
             emailId: cd.emailId,
-            termsAndConditions: cd.termsAndConditions || q.notes,
+            termsAndConditions: undefined,
             ...(cd.placeholderFields || {}),
           });
+          const termsSrc = cd.termsAndConditions ?? q.notes;
+          if (Array.isArray(termsSrc) && termsSrc.length) {
+            setTermsLines(termsSrc.map((value) => ({ key: nextKey(), value: value || '' })));
+          } else if (typeof termsSrc === 'string' && termsSrc.trim()) {
+            const parts = termsSrc.split(/\n+/).map((v) => v.trim()).filter(Boolean);
+            setTermsLines(
+              (parts.length ? parts : [termsSrc]).map((value) => ({ key: nextKey(), value })),
+            );
+          } else {
+            setTermsLines([{ key: nextKey(), value: '' }]);
+          }
           const acts = cd.activities || [];
           if (acts.length) {
             setItems(acts.map((a) => ({
@@ -361,6 +373,10 @@ export default function GenerateReport() {
   const updateNote = (key, value) => setActivityNotes((notes) => notes.map((n) => (n.key === key ? { ...n, value } : n)));
   const removeNote = (key) => setActivityNotes((notes) => (notes.length > 1 ? notes.filter((n) => n.key !== key) : notes));
 
+  const addTerm = () => setTermsLines((lines) => [...lines, { key: nextKey(), value: '' }]);
+  const updateTerm = (key, value) => setTermsLines((lines) => lines.map((n) => (n.key === key ? { ...n, value } : n)));
+  const removeTerm = (key) => setTermsLines((lines) => (lines.length > 1 ? lines.filter((n) => n.key !== key) : lines));
+
   const headerValuesFromForm = (values) => {
     const out = {};
     headerFields.forEach((f) => {
@@ -434,7 +450,7 @@ export default function GenerateReport() {
       emailId: values.emailId || null,
       placeholderFields,
       activityNotes: activityNotes.map((n) => n.value).filter(Boolean),
-      termsAndConditions: values.termsAndConditions || null,
+      termsAndConditions: termsLines.map((n) => n.value).filter(Boolean),
       activities: validItems.map((r) => ({
         key: r.key,
         activityId: r.activityId,
@@ -466,12 +482,14 @@ export default function GenerateReport() {
       total: Number(it.quantity || 0) * Number(it.unit_price || 0),
     }));
 
+    const termsText = termsLines.map((n) => n.value).filter(Boolean).join('\n') || null;
+
     const payload = {
       customer_id: values.customerId,
       quotation_template_id: starredTemplate.id,
       quotation_number: headerData.reportNo || null,
       quotation_date: dateIso,
-      notes: values.termsAndConditions || null,
+      notes: termsText,
       currency: 'INR',
       discount: 0,
       custom_data: customData,
@@ -490,7 +508,7 @@ export default function GenerateReport() {
       report: {
         quotation_number: headerData.reportNo || 'Preview',
         quotation_date: dateIso,
-        notes: values.termsAndConditions || null,
+        notes: termsText,
         currency: 'INR',
         total: itemsTotals.cost,
         custom_data: customData,
@@ -573,7 +591,7 @@ export default function GenerateReport() {
       setItems([fresh]);
       setActiveKey(fresh.key);
       setActivityNotes([{ key: nextKey(), value: '' }]);
-      form.setFieldsValue({ termsAndConditions: undefined });
+      setTermsLines([{ key: nextKey(), value: '' }]);
       return;
     }
     const extra = {};
@@ -983,9 +1001,26 @@ export default function GenerateReport() {
             </div>
           ))}
 
-          <Form.Item name="termsAndConditions" label="Terms and Conditions" className="!mt-6">
-            <Input.TextArea rows={6} placeholder="Enter terms and conditions" />
-          </Form.Item>
+          <div className="mb-3 mt-6 flex items-center justify-between gap-4">
+            <Typography.Title level={5} className="!mb-0 !text-[15px] !font-semibold !text-slate-800">
+              Terms and Conditions
+            </Typography.Title>
+            <Button icon={<PlusOutlined />} onClick={addTerm}>Add term</Button>
+          </div>
+
+          {termsLines.map((term, idx) => (
+            <div key={term.key} className="mb-2 flex gap-2">
+              <Input
+                className="flex-1"
+                placeholder={idx === 0 ? 'Enter terms and conditions' : 'Enter another term'}
+                value={term.value}
+                onChange={(e) => updateTerm(term.key, e.target.value)}
+              />
+              {termsLines.length > 1 && (
+                <Button danger icon={<DeleteOutlined />} onClick={() => removeTerm(term.key)} />
+              )}
+            </div>
+          ))}
           </div>
 
           {templateExtraFields.length > 0 ? (

@@ -255,6 +255,12 @@ class Quotation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[Optional[str]] = mapped_column(Text)
     review_remark: Mapped[Optional[str]] = mapped_column(Text)
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     custom_data: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
 
     organization: Mapped["Organization"] = relationship(back_populates="quotations")
@@ -263,6 +269,9 @@ class Quotation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     created_by_user: Mapped["User"] = relationship(
         back_populates="created_quotations",
         foreign_keys=[created_by],
+    )
+    reviewed_by_user: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[reviewed_by],
     )
     items: Mapped[list["QuotationItem"]] = relationship(
         back_populates="quotation",

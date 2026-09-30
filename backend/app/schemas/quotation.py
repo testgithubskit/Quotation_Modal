@@ -96,6 +96,7 @@ class QuotationResponse(ORMModel):
     notes: Optional[str]
     review_remark: Optional[str] = None
     reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[UUID] = None
     custom_data: dict
     items: list[QuotationItemResponse] = Field(default_factory=list)
     created_at: datetime
@@ -119,6 +120,8 @@ class QuotationListResponse(ORMModel):
     created_by_name: Optional[str] = None
     review_remark: Optional[str] = None
     reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[UUID] = None
+    reviewed_by_name: Optional[str] = None
     report_display_number: Optional[str] = None
     report_revision: Optional[int] = None
     superseded_by: Optional[UUID] = None

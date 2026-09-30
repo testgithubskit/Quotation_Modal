@@ -53,11 +53,18 @@ class NotificationService:
             for c in db.scalars(select(Customer).where(Customer.id.in_(customer_ids))).all():
                 customers[c.id] = c
 
+        reviewer_ids = {n.quotation.reviewed_by for n in rows if n.quotation and n.quotation.reviewed_by}
+        reviewers = {}
+        if reviewer_ids:
+            for u in db.scalars(select(User).where(User.id.in_(reviewer_ids))).all():
+                reviewers[u.id] = u
+
         out: list[dict] = []
         for n in rows:
             q = n.quotation
             cust = customers.get(q.customer_id) if q else None
             submitter = q.created_by_user if q else None
+            reviewer = reviewers.get(q.reviewed_by) if q and q.reviewed_by else None
             display_number = q.quotation_number if q else None
             if q:
                 lineage = (q.custom_data or {}).get("_report_lineage") or {}
@@ -80,6 +87,7 @@ class NotificationService:
                     "quotation_status": q.status if q else None,
                     "review_remark": q.review_remark if q else None,
                     "reviewed_at": q.reviewed_at if q else None,
+                    "reviewed_by_name": reviewer.full_name if reviewer else None,
                 }
             )
         return out, total

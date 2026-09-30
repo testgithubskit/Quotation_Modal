@@ -48,37 +48,50 @@ function StatusChart({ items }) {
   items.forEach((item) => {
     if (!item.value || !total) return;
     const sweep = (item.value / total) * 360;
-    slices.push({ ...item, start: cursor, end: cursor + sweep });
+    const pct = total ? Math.round((item.value / total) * 100) : 0;
+    slices.push({ ...item, start: cursor, end: cursor + sweep, pct });
     cursor += sweep;
   });
 
   return (
-    <div className="flex flex-wrap items-center justify-center gap-6">
-      <svg viewBox="0 0 120 120" className="h-40 w-40 shrink-0" role="img" aria-label="Reports by status">
+    <div className="flex flex-wrap items-center justify-center gap-4">
+      <svg viewBox="0 0 120 120" className="h-36 w-36 shrink-0" role="img" aria-label="Reports by status">
         {total === 0 ? (
           <circle cx="60" cy="60" r="52" fill="#e2e8f0" />
-        ) : slices.map((slice) => (
-          slice.end - slice.start >= 359.9 ? (
-            <circle key={slice.label} cx="60" cy="60" r="52" fill={slice.color} />
-          ) : (
+        ) : slices.map((slice) => {
+          const title = `${slice.label}: ${slice.value} (${slice.pct}%)`;
+          if (slice.end - slice.start >= 359.9) {
+            return (
+              <circle key={slice.label} cx="60" cy="60" r="52" fill={slice.color} className="cursor-pointer">
+                <title>{title}</title>
+              </circle>
+            );
+          }
+          return (
             <path
               key={slice.label}
               d={pieSlicePath(60, 60, 52, slice.start, slice.end)}
               fill={slice.color}
-            />
-          )
-        ))}
+              className="cursor-pointer"
+            >
+              <title>{title}</title>
+            </path>
+          );
+        })}
       </svg>
-      <div className="flex min-w-[140px] flex-col gap-2">
-        {items.map((item) => (
-          <div key={item.label} className="flex items-center justify-between gap-4 text-xs text-slate-600">
-            <span className="flex items-center gap-2">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
-              {item.label}
-            </span>
-            <span className="font-semibold text-slate-800">{item.value}</span>
-          </div>
-        ))}
+      <div className="flex min-w-[120px] flex-col gap-2">
+        {items.map((item) => {
+          const pct = total ? Math.round((item.value / total) * 100) : 0;
+          return (
+            <div key={item.label} className="flex items-center justify-between gap-3 text-xs text-slate-600">
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+                {item.label}
+              </span>
+              <span className="font-semibold text-slate-800">{item.value} · {pct}%</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -86,20 +99,27 @@ function StatusChart({ items }) {
 
 function MonthChart({ items }) {
   const max = Math.max(1, ...items.map((item) => item.count));
+  const yearTotal = items.reduce((sum, item) => sum + item.count, 0);
   return (
-    <div className="flex h-44 items-end gap-2">
-      {items.map((item) => (
-        <div key={item.label} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
-          <span className="text-xs font-medium text-slate-600">{item.count}</span>
-          <div className="flex h-32 w-full items-end">
-            <div
-              className="w-full rounded-t-md bg-teal-500"
-              style={{ height: `${Math.max(item.count ? 8 : 2, (item.count / max) * 100)}%` }}
-            />
-          </div>
-          <span className="text-[11px] text-slate-500">{item.label}</span>
-        </div>
-      ))}
+    <div className="flex h-44 items-end gap-1.5">
+      {items.map((item) => {
+        const pct = yearTotal ? Math.round((item.count / yearTotal) * 100) : 0;
+        const tip = `${item.fullLabel}: ${item.count} report${item.count === 1 ? '' : 's'} · ${pct}% of ${item.year}`;
+        return (
+          <Tooltip key={item.label} title={tip}>
+            <div className="flex h-full min-w-0 flex-1 cursor-pointer flex-col items-center justify-end gap-1">
+              <span className="text-[10px] font-medium text-slate-600">{item.count || ''}</span>
+              <div className="flex h-32 w-full items-end">
+                <div
+                  className="w-full rounded-t-md bg-teal-500 transition hover:bg-teal-600"
+                  style={{ height: `${Math.max(item.count ? 8 : 2, (item.count / max) * 100)}%` }}
+                />
+              </div>
+              <span className="text-[10px] text-slate-500">{item.label}</span>
+            </div>
+          </Tooltip>
+        );
+      })}
     </div>
   );
 }
@@ -160,16 +180,17 @@ export default function Dashboard() {
   }, [quotations]);
 
   const monthlySubmissions = useMemo(() => {
-    const months = [];
-    for (let i = 5; i >= 0; i -= 1) {
-      const month = dayjs().subtract(i, 'month');
+    const year = dayjs().year();
+    return Array.from({ length: 12 }, (_, i) => {
+      const month = dayjs().year(year).month(i).startOf('month');
       const key = month.format('YYYY-MM');
-      months.push({
+      return {
         label: month.format('MMM'),
+        fullLabel: month.format('MMMM YYYY'),
+        year: String(year),
         count: quotations.filter((q) => dayjs(q.created_at || q.quotation_date).format('YYYY-MM') === key).length,
-      });
-    }
-    return months;
+      };
+    });
   }, [quotations]);
 
   const openPreview = async (record) => {
@@ -277,7 +298,7 @@ export default function Dashboard() {
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={8}>
           <div className="h-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <Typography.Title level={5} className="!mb-4 !text-sm">Reports by status</Typography.Title>
             <StatusChart
@@ -289,9 +310,11 @@ export default function Dashboard() {
             />
           </div>
         </Col>
-        <Col xs={24} lg={12}>
+        <Col xs={24} lg={16}>
           <div className="h-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <Typography.Title level={5} className="!mb-4 !text-sm">Reports submitted (last 6 months)</Typography.Title>
+            <Typography.Title level={5} className="!mb-4 !text-sm">
+              Reports submitted ({dayjs().year()})
+            </Typography.Title>
             <MonthChart items={monthlySubmissions} />
           </div>
         </Col>

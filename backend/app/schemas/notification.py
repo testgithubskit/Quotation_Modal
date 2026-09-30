@@ -25,6 +25,7 @@ class NotificationResponse(ORMModel):
     quotation_status: Optional[QuotationStatus] = None
     review_remark: Optional[str] = None
     reviewed_at: Optional[datetime] = None
+    reviewed_by_name: Optional[str] = None
 
 
 class NotificationAcknowledgeRequest(BaseModel):

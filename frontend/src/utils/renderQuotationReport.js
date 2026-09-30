@@ -221,7 +221,9 @@ export function buildPlaceholderMap({ report, customer, organization } = {}) {
     subject: cd.subject || '',
     items_table: buildItemsTableHtml(lineItems, report?.total),
     grand_total: fmtMoney(report?.total),
-    terms: cd.termsAndConditions || report?.notes || '',
+    terms: Array.isArray(cd.termsAndConditions)
+      ? cd.termsAndConditions.map(esc).join('<br/>')
+      : (cd.termsAndConditions || report?.notes || ''),
     activity_notes: Array.isArray(cd.activityNotes)
       ? cd.activityNotes.map(esc).join('<br/>')
       : '',
@@ -383,7 +385,9 @@ export function downloadQuotationExcel(report, {
   const notes = Array.isArray(cd.activityNotes)
     ? cd.activityNotes.filter(Boolean).join('\n')
     : (cd.activityNotes || '');
-  const terms = cd.termsAndConditions || report?.notes || '';
+  const terms = Array.isArray(cd.termsAndConditions)
+    ? cd.termsAndConditions.filter(Boolean).join('\n')
+    : (cd.termsAndConditions || report?.notes || '');
 
   const aoa = [
     [organizationName],

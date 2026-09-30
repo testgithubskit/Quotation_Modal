@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Button, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Typography, message,
+  Button, Input, Modal, Popconfirm, Select, Space, Switch, Table, Typography, message,
 } from 'antd';
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../config/auth.js';
@@ -22,6 +22,19 @@ const FIELD_TYPES = [
   { value: 'URL', label: 'URL' },
   { value: OTHER_TYPE, label: 'Other' },
 ];
+
+let draftUid = 0;
+const nextDraftKey = () => `draft-${Date.now()}-${draftUid++}`;
+
+function emptyDraft() {
+  return {
+    key: nextDraftKey(),
+    field_label: '',
+    field_type: 'TEXT',
+    custom_type: '',
+    is_required: false,
+  };
+}
 
 function toKey(label) {
   return String(label || '')
@@ -53,12 +66,11 @@ export default function ManageColumnsModal({
   onUpdateBuiltin,
   onHideBuiltin,
 }) {
-  const [addForm] = Form.useForm();
   const [savingId, setSavingId] = useState(null);
   const [adding, setAdding] = useState(false);
   const [draftLabels, setDraftLabels] = useState({});
   const [editingKey, setEditingKey] = useState(null);
-  const [typeChoice, setTypeChoice] = useState('TEXT');
+  const [draftRows, setDraftRows] = useState([emptyDraft()]);
   const wasOpen = useRef(false);
 
   const fieldList = Array.isArray(fields) ? fields : EMPTY_LIST;
@@ -81,13 +93,11 @@ export default function ManageColumnsModal({
 
   useEffect(() => {
     if (open && !wasOpen.current) {
-      addForm.resetFields();
-      addForm.setFieldsValue({ field_type: 'TEXT', is_required: false, custom_type: undefined });
-      setTypeChoice('TEXT');
+      setDraftRows([emptyDraft()]);
     }
     if (!open) setEditingKey(null);
     wasOpen.current = open;
-  }, [open, addForm]);
+  }, [open]);
 
   const rename = async (field, index) => {
     const key = rowKey(field, index);
@@ -159,78 +169,101 @@ export default function ManageColumnsModal({
     }
   };
 
-  const addColumn = async () => {
-    try {
-      const values = await addForm.validateFields();
-      const field_label = values.field_label.trim();
-      const field_key = toKey(field_label);
-      if (!field_key) {
-        message.error('Enter a valid name');
-        return;
-      }
+  const updateDraft = (key, patch) => {
+    setDraftRows((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  };
 
-      const isOther = values.field_type === OTHER_TYPE;
-      const customType = String(values.custom_type || '').trim();
-      if (isOther && !customType) {
-        message.error('Enter a custom type');
-        return;
-      }
+  const addDraftRow = () => setDraftRows((rows) => [...rows, emptyDraft()]);
+  const removeDraftRow = (key) => {
+    setDraftRows((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== key) : rows));
+  };
 
-      const field_type = isOther ? 'TEXT' : (values.field_type || 'TEXT');
-      const options = isOther ? { custom_type: customType } : null;
+  const restoreOrCreateColumn = async (draft, displayOrder) => {
+    const field_label = String(draft.field_label || '').trim();
+    const field_key = toKey(field_label);
+    if (!field_key) {
+      throw new Error('Enter a valid name');
+    }
 
-      const builtinKeys = ['name', 'description', 'unit', 'unit_price'];
-      if (builtinKeys.includes(field_key) && entityType === 'ACTIVITY') {
-        (onUpdateBuiltin || updateActivityBuiltinColumn)(field_key, {
-          is_hidden: false,
-          field_label,
-          is_required: Boolean(values.is_required),
-        });
-        message.success('Column restored');
-        addForm.resetFields();
-        addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
-        setTypeChoice('TEXT');
-        onChanged?.();
-        return;
-      }
+    const isOther = draft.field_type === OTHER_TYPE;
+    const customType = String(draft.custom_type || '').trim();
+    if (isOther && !customType) {
+      throw new Error(`Enter a custom type for "${field_label}"`);
+    }
 
-      const hiddenBuiltin = builtinList.find(
-        (b) => b?.is_hidden && (
-          b.field_key === field_key
-          || String(b.field_label || '').toLowerCase() === field_label.toLowerCase()
-        ),
-      );
-      if (hiddenBuiltin) {
-        (onUpdateBuiltin || updateActivityBuiltinColumn)(hiddenBuiltin.field_key, {
-          is_hidden: false,
-          field_label,
-          is_required: Boolean(values.is_required),
-        });
-        message.success('Column restored');
-        onChanged?.();
-        return;
-      }
+    const field_type = isOther ? 'TEXT' : (draft.field_type || 'TEXT');
+    const options = isOther ? { custom_type: customType } : null;
+    const is_required = Boolean(draft.is_required);
 
-      setAdding(true);
-      await api.post('/custom-fields', {
-        entity_type: entityType,
-        field_key,
+    const builtinKeys = ['name', 'description', 'unit', 'unit_price'];
+    if (builtinKeys.includes(field_key) && entityType === 'ACTIVITY') {
+      (onUpdateBuiltin || updateActivityBuiltinColumn)(field_key, {
+        is_hidden: false,
         field_label,
-        field_type,
-        is_required: Boolean(values.is_required),
-        is_visible: true,
-        is_editable: true,
-        display_order: fieldList.length,
-        options,
+        is_required,
       });
-      message.success('Column added');
-      addForm.resetFields();
-      addForm.setFieldsValue({ field_type: 'TEXT', is_required: false });
-      setTypeChoice('TEXT');
+      return 'restored';
+    }
+
+    const hiddenBuiltin = builtinList.find(
+      (b) => b?.is_hidden && (
+        b.field_key === field_key
+        || String(b.field_label || '').toLowerCase() === field_label.toLowerCase()
+      ),
+    );
+    if (hiddenBuiltin) {
+      (onUpdateBuiltin || updateActivityBuiltinColumn)(hiddenBuiltin.field_key, {
+        is_hidden: false,
+        field_label,
+        is_required,
+      });
+      return 'restored';
+    }
+
+    await api.post('/custom-fields', {
+      entity_type: entityType,
+      field_key,
+      field_label,
+      field_type,
+      is_required,
+      is_visible: true,
+      is_editable: true,
+      display_order: displayOrder,
+      options,
+    });
+    return 'created';
+  };
+
+  const addColumns = async () => {
+    const filled = draftRows.filter((r) => String(r.field_label || '').trim());
+    if (!filled.length) {
+      message.error('Enter at least one column name');
+      return;
+    }
+
+    const labels = filled.map((r) => String(r.field_label).trim().toLowerCase());
+    if (new Set(labels).size !== labels.length) {
+      message.error('Duplicate column names in the draft list');
+      return;
+    }
+
+    setAdding(true);
+    let created = 0;
+    let restored = 0;
+    try {
+      for (let i = 0; i < filled.length; i += 1) {
+        const result = await restoreOrCreateColumn(filled[i], fieldList.length + i);
+        if (result === 'restored') restored += 1;
+        else created += 1;
+      }
+      const parts = [];
+      if (created) parts.push(`${created} added`);
+      if (restored) parts.push(`${restored} restored`);
+      message.success(parts.join(', ') || 'Columns saved');
+      setDraftRows([emptyDraft()]);
       onChanged?.();
     } catch (error) {
-      if (error?.errorFields) return;
-      message.error(getApiErrorMessage(error, 'Failed to add column'));
+      message.error(error?.message || getApiErrorMessage(error, 'Failed to add columns'));
     } finally {
       setAdding(false);
     }
@@ -242,13 +275,13 @@ export default function ManageColumnsModal({
       open={open}
       onCancel={onClose}
       footer={<Button onClick={onClose}>Close</Button>}
-      width={720}
+      width={760}
       destroyOnHidden={false}
       maskClosable={false}
       keyboard={false}
     >
       <Typography.Text type="secondary" className="mb-3 block">
-        Rename existing columns with Edit. Mark mandatory or delete. Add a new column below.
+        Rename existing columns with Edit. Mark mandatory or delete. Add one or more new columns below.
       </Typography.Text>
 
       <Table
@@ -347,49 +380,78 @@ export default function ManageColumnsModal({
       />
 
       <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
-        <Typography.Text strong className="mb-3 block">Add column</Typography.Text>
-        <Form form={addForm} layout="vertical" initialValues={{ field_type: 'TEXT', is_required: false }}>
-          <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-[1fr_1fr_auto]">
-            <Form.Item
-              name="field_label"
-              label="Column name"
-              rules={[{ required: true, message: 'Enter column name' }]}
-              className="!mb-2"
-            >
-              <Input placeholder="e.g. GST Number" />
-            </Form.Item>
-            <Form.Item name="field_type" label="Type" rules={[{ required: true }]} className="!mb-2">
-              <Select
-                options={FIELD_TYPES}
-                onChange={(v) => {
-                  setTypeChoice(v);
-                  if (v !== OTHER_TYPE) addForm.setFieldValue('custom_type', undefined);
-                }}
-              />
-            </Form.Item>
-            <Form.Item
-              name="is_required"
-              label="Mandatory"
-              valuePropName="checked"
-              className="!mb-2"
-            >
-              <Switch checkedChildren="Required" unCheckedChildren="Optional" />
-            </Form.Item>
-          </div>
-          {typeChoice === OTHER_TYPE ? (
-            <Form.Item
-              name="custom_type"
-              label="Custom type"
-              rules={[{ required: true, message: 'Enter custom type' }]}
-              className="!mb-2"
-            >
-              <Input placeholder="e.g. Barcode / Batch No" />
-            </Form.Item>
-          ) : null}
-          <Button type="primary" icon={<PlusOutlined />} loading={adding} onClick={addColumn}>
-            Add column
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <Typography.Text strong>Add columns</Typography.Text>
+          <Button icon={<PlusOutlined />} onClick={addDraftRow}>
+            Add row
           </Button>
-        </Form>
+        </div>
+
+        <div className="space-y-3">
+          {draftRows.map((row) => (
+            <div
+              key={row.key}
+              className="grid grid-cols-1 items-end gap-3 rounded-md border border-slate-200 bg-white p-3 sm:grid-cols-[1fr_140px_auto_auto]"
+            >
+              <div>
+                <div className="mb-1 text-xs font-medium text-slate-600">Column name</div>
+                <Input
+                  placeholder="e.g. GST Number"
+                  value={row.field_label}
+                  onChange={(e) => updateDraft(row.key, { field_label: e.target.value })}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-medium text-slate-600">Type</div>
+                <Select
+                  className="w-full"
+                  value={row.field_type}
+                  options={FIELD_TYPES}
+                  onChange={(v) => updateDraft(row.key, {
+                    field_type: v,
+                    custom_type: v === OTHER_TYPE ? row.custom_type : '',
+                  })}
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-medium text-slate-600">Mandatory</div>
+                <Switch
+                  checked={row.is_required}
+                  checkedChildren="Required"
+                  unCheckedChildren="Optional"
+                  onChange={(checked) => updateDraft(row.key, { is_required: checked })}
+                />
+              </div>
+              <Button
+                danger
+                type="text"
+                icon={<DeleteOutlined />}
+                disabled={draftRows.length <= 1}
+                onClick={() => removeDraftRow(row.key)}
+              />
+              {row.field_type === OTHER_TYPE ? (
+                <div className="sm:col-span-4">
+                  <div className="mb-1 text-xs font-medium text-slate-600">Custom type</div>
+                  <Input
+                    placeholder="e.g. Barcode / Batch No"
+                    value={row.custom_type}
+                    onChange={(e) => updateDraft(row.key, { custom_type: e.target.value })}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+
+        <Button
+          type="primary"
+          className="mt-3"
+          icon={<PlusOutlined />}
+          loading={adding}
+          onClick={addColumns}
+        >
+          Add columns
+        </Button>
       </div>
     </Modal>
   );
