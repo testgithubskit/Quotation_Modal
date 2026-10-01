@@ -228,6 +228,7 @@ export function buildPlaceholderMap({ report, customer, organization } = {}) {
       ? cd.activityNotes.map(esc).join('<br/>')
       : '',
     org_name: organization?.name || organization?.organization_name || '',
+    org_phone: organization?.phone || '',
     org_address: organization?.address || '',
     page_number: '1',
     total_pages: '1',

@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 
 from app.api.deps import DbSession, Pagination, require_permission
 from app.core.exceptions import AppError
@@ -107,6 +107,7 @@ def delete_customer(
     customer_id: UUID,
     db: DbSession,
     current_user: User = Depends(require_permission("customers:delete")),
+    cascade: bool = Query(False, description="Delete linked quotations as well"),
 ) -> MessageResponse:
-    customer_service.delete(db, current_user, customer_id)
+    customer_service.delete(db, current_user, customer_id, cascade=cascade)
     return MessageResponse(message="Customer deleted")

@@ -1,8 +1,8 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 
-from app.api.deps import DbSession, require_permission
+from app.api.deps import DbSession, Pagination, require_permission
 from app.models import User
 from app.schemas.common import MessageResponse, PaginatedResponse
 from app.schemas.notification import NotificationAcknowledgeRequest, NotificationResponse
@@ -14,23 +14,22 @@ router = APIRouter()
 @router.get("", response_model=PaginatedResponse[NotificationResponse])
 def list_notifications(
     db: DbSession,
+    pagination: Pagination,
     current_user: User = Depends(require_permission("notifications:read")),
-    page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
-    unacknowledged_only: bool = Query(False),
+    unacknowledged_only: bool = Depends(lambda: False),
 ) -> PaginatedResponse[NotificationResponse]:
     items, total = notification_service.list_for_user(
         db,
         current_user,
-        page=page,
-        page_size=page_size,
+        page=pagination["page"],
+        page_size=pagination["page_size"],
         unacknowledged_only=unacknowledged_only,
     )
     return PaginatedResponse.build(
         [NotificationResponse.model_validate(item) for item in items],
         total,
-        page,
-        page_size,
+        pagination["page"],
+        pagination["page_size"],
     )
 
 

@@ -230,12 +230,30 @@ export default function Customers() {
 
   const remove = async (id) => {
     try {
-      await api.delete(`/customers/${id}`);
-      message.success('Deleted');
-      if (editingId === id) cancelEdit();
-      load();
+      // Check if customer has linked quotations
+      const { data: quotations } = await api.get('/quotations', { params: { customer_id: id } });
+      const linkedCount = quotations?.items?.length || 0;
+
+      Modal.confirm({
+        title: linkedCount > 0 ? 'Delete customer and linked reports?' : 'Delete customer?',
+        content: linkedCount > 0
+          ? `This customer has ${linkedCount} linked quotation${linkedCount > 1 ? 's' : ''}. Deleting this customer will also delete all linked reports. This action cannot be undone.`
+          : 'Are you sure you want to delete this customer?',
+        okText: 'Delete',
+        okType: 'danger',
+        onOk: async () => {
+          try {
+            await api.delete(`/customers/${id}`, { params: { cascade: true } });
+            message.success('Deleted');
+            if (editingId === id) cancelEdit();
+            load();
+          } catch (error) {
+            message.error(getApiErrorMessage(error, 'Delete failed'));
+          }
+        },
+      });
     } catch (error) {
-      message.error(getApiErrorMessage(error, 'Delete failed'));
+      message.error(getApiErrorMessage(error, 'Failed to check linked records'));
     }
   };
 
@@ -386,9 +404,7 @@ export default function Customers() {
             <Space>
               <Tooltip title="Edit"><Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} /></Tooltip>
               <Tooltip title="Delete">
-                <Popconfirm title="Delete customer?" onConfirm={() => remove(record.id)}>
-                  <Button type="text" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => remove(record.id)} />
               </Tooltip>
             </Space>
           )

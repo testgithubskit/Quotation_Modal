@@ -203,12 +203,32 @@ export default function Activities() {
 
   const remove = async (id) => {
     try {
-      await api.delete(`/activities/${id}`);
-      message.success('Deleted');
-      if (editingId === id) cancelEdit();
-      load();
+      // Check if activity has linked quotations
+      const { data: quotations } = await api.get('/quotations');
+      const linkedCount = quotations?.items?.filter(q => 
+        q.items?.some(item => item.activity_id === id)
+      )?.length || 0;
+
+      Modal.confirm({
+        title: linkedCount > 0 ? 'Delete activity and linked reports?' : 'Delete activity?',
+        content: linkedCount > 0
+          ? `This activity is used in ${linkedCount} quotation${linkedCount > 1 ? 's' : ''}. Deleting this activity will also delete all linked reports. This action cannot be undone.`
+          : 'Are you sure you want to delete this activity?',
+        okText: 'Delete',
+        okType: 'danger',
+        onOk: async () => {
+          try {
+            await api.delete(`/activities/${id}`, { params: { cascade: true } });
+            message.success('Deleted');
+            if (editingId === id) cancelEdit();
+            load();
+          } catch (error) {
+            message.error(getApiErrorMessage(error, 'Delete failed'));
+          }
+        },
+      });
     } catch (error) {
-      message.error(getApiErrorMessage(error, 'Delete failed'));
+      message.error(getApiErrorMessage(error, 'Failed to check linked records'));
     }
   };
 
@@ -359,9 +379,7 @@ export default function Activities() {
             <Space>
               <Tooltip title="Edit"><Button type="text" icon={<EditOutlined />} onClick={() => startEdit(record)} /></Tooltip>
               <Tooltip title="Delete">
-                <Popconfirm title="Delete activity?" onConfirm={() => remove(record.id)}>
-                  <Button type="text" danger icon={<DeleteOutlined />} />
-                </Popconfirm>
+                <Button type="text" danger icon={<DeleteOutlined />} onClick={() => remove(record.id)} />
               </Tooltip>
             </Space>
           )

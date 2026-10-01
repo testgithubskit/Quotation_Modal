@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Button, Col, Row, Spin, Table, Tooltip, Typography, message } from 'antd';
+import { Button, Col, Row, Select, Spin, Table, Tooltip, Typography, message } from 'antd';
 import {
   AppstoreOutlined,
   CheckCircleOutlined,
@@ -153,6 +153,7 @@ function MonthChart({ items }) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState(dayjs().year());
   const [users, setUsers] = useState([]);
   const [quotations, setQuotations] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -205,8 +206,17 @@ export default function Dashboard() {
     };
   }, [quotations]);
 
+  const availableYears = useMemo(() => {
+    const years = new Set();
+    quotations.forEach((q) => {
+      const year = dayjs(q.created_at || q.quotation_date).year();
+      years.add(year);
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [quotations]);
+
   const monthlySubmissions = useMemo(() => {
-    const year = dayjs().year();
+    const year = selectedYear;
     return Array.from({ length: 12 }, (_, i) => {
       const month = dayjs().year(year).month(i).startOf('month');
       const key = month.format('YYYY-MM');
@@ -222,7 +232,7 @@ export default function Dashboard() {
         rejected: byStatus('REJECTED'),
       };
     });
-  }, [quotations]);
+  }, [quotations, selectedYear]);
 
   const openPreview = async (record) => {
     setBusyId(record.id);
@@ -343,9 +353,23 @@ export default function Dashboard() {
         </Col>
         <Col xs={24} lg={16}>
           <div className="h-full rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <Typography.Title level={5} className="!mb-4 !text-sm">
-              Reports submitted ({dayjs().year()})
-            </Typography.Title>
+            <div className="mb-4 flex items-center justify-between">
+              <Typography.Title level={5} className="!mb-0 !text-sm">
+                Reports submitted
+              </Typography.Title>
+              <Select
+                value={selectedYear}
+                onChange={setSelectedYear}
+                style={{ width: 100 }}
+                size="small"
+              >
+                {availableYears.map((year) => (
+                  <Select.Option key={year} value={year}>
+                    {year}
+                  </Select.Option>
+                ))}
+              </Select>
+            </div>
             <MonthChart items={monthlySubmissions} />
           </div>
         </Col>

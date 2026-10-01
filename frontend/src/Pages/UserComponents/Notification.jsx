@@ -87,9 +87,7 @@ export default function Notification() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/notifications', {
-        params: { page: 1, page_size: 200 },
-      });
+      const { data } = await api.get('/notifications');
       setRows(data?.items || []);
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to load notifications'));

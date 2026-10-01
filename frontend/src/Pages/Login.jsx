@@ -110,7 +110,7 @@ export default function Login() {
                   { type: 'email', message: 'Enter a valid email' },
                 ]}
               >
-                <Input size="large" placeholder="admin@company.com" autoComplete="off" className="!rounded-lg" />
+                <Input size="large" placeholder="Enter your email" autoComplete="off" className="!rounded-lg" />
               </Form.Item>
               <Form.Item
                 name="password"
@@ -229,7 +229,7 @@ export default function Login() {
                     { type: 'email', message: 'Valid email required' },
                   ]}
                 >
-                  <Input size="large" placeholder="admin@company.com" autoComplete="off" className="!rounded-lg" />
+                  <Input size="large" placeholder="Enter your email" autoComplete="off" className="!rounded-lg" />
                 </Form.Item>
                 <Form.Item
                   name="phone"

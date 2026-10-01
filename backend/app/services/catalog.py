@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import AppError, ConflictError, NotFoundError
 from app.crud import activity as activity_crud
 from app.crud import customer as customer_crud
-from app.models import Activity, Customer, User
+from app.models import Activity, Customer, Quotation, QuotationItem, User
 from app.models.enums import AuditAction, CustomFieldEntity
 from app.schemas.activity import ActivityCreate, ActivityUpdate
 from app.schemas.customer import CustomerCreate, CustomerUpdate
@@ -77,8 +77,21 @@ class CustomerService:
         db.refresh(customer)
         return customer
 
-    def delete(self, db: Session, current_user: User, customer_id: UUID) -> None:
+    def delete(self, db: Session, current_user: User, customer_id: UUID, cascade: bool = False) -> None:
+        from app.crud import quotation as quotation_crud
+        from sqlalchemy import delete as sql_delete
+
         customer = self.get(db, current_user, customer_id)
+        
+        if cascade:
+            # Delete all quotations linked to this customer first
+            db.execute(
+                sql_delete(Quotation).where(
+                    Quotation.organization_id == current_user.organization_id,
+                    Quotation.customer_id == customer_id
+                )
+            )
+        
         customer_crud.remove(db, customer)
         audit_log_service.record(
             db,
@@ -177,8 +190,28 @@ class ActivityService:
         db.refresh(activity)
         return activity
 
-    def delete(self, db: Session, current_user: User, activity_id: UUID) -> None:
+    def delete(self, db: Session, current_user: User, activity_id: UUID, cascade: bool = False) -> None:
+        from sqlalchemy import delete as sql_delete, select
+
         activity = self.get(db, current_user, activity_id)
+        
+        if cascade:
+            # Find all quotations that have items referencing this activity
+            quotation_ids_with_activity = db.scalars(
+                select(QuotationItem.quotation_id).where(
+                    QuotationItem.activity_id == activity_id
+                ).distinct()
+            ).all()
+            
+            if quotation_ids_with_activity:
+                # Delete those quotations
+                db.execute(
+                    sql_delete(Quotation).where(
+                        Quotation.organization_id == current_user.organization_id,
+                        Quotation.id.in_(quotation_ids_with_activity)
+                    )
+                )
+        
         activity_crud.remove(db, activity)
         audit_log_service.record(
             db,
