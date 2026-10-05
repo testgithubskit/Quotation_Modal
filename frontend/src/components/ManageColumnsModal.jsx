@@ -381,13 +381,13 @@ export default function ManageColumnsModal({
 
       <div className="mt-5 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <Typography.Text strong>Add columns</Typography.Text>
+          <Typography.Text strong>Add column</Typography.Text>
           <Button icon={<PlusOutlined />} onClick={addDraftRow}>
             Add row
           </Button>
         </div>
 
-        <div className="space-y-3">
+        <div className="max-h-60 overflow-y-auto space-y-3">
           {draftRows.map((row) => (
             <div
               key={row.key}
@@ -450,7 +450,7 @@ export default function ManageColumnsModal({
           loading={adding}
           onClick={addColumns}
         >
-          Add columns
+          Add column
         </Button>
       </div>
     </Modal>

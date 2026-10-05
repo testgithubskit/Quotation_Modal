@@ -3,7 +3,7 @@ import {
   Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tooltip, Typography, message,
 } from 'antd';
 import {
-  PlusOutlined, DeleteOutlined, EditOutlined, CheckOutlined, CloseOutlined, ColumnHeightOutlined,
+  PlusOutlined, DeleteOutlined, EditOutlined, CheckOutlined, CloseOutlined,
 } from '@ant-design/icons';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import TableToolbar from '../../Components/TableToolbar';
@@ -179,6 +179,7 @@ export default function Team() {
     {
       title: 'Name',
       dataIndex: 'full_name',
+      minWidth: 150,
       sorter: (a, b) => String(a.full_name || '').localeCompare(String(b.full_name || '')),
       render: (v, record) => (
         editingId === record.id
@@ -189,12 +190,13 @@ export default function Team() {
     {
       title: 'Email',
       dataIndex: 'email',
+      minWidth: 200,
       sorter: (a, b) => String(a.email || '').localeCompare(String(b.email || '')),
     },
     {
       title: 'Role',
       dataIndex: 'role_name',
-      width: 140,
+      minWidth: 140,
       sorter: (a, b) => String(a.role_name || '').localeCompare(String(b.role_name || '')),
       render: (v, record) => (
         editingId === record.id
@@ -215,6 +217,7 @@ export default function Team() {
     {
       title: 'Phone',
       dataIndex: 'phone',
+      minWidth: 130,
       sorter: (a, b) => String(a.phone || '').localeCompare(String(b.phone || '')),
       render: (v, record) => (
         editingId === record.id
@@ -238,6 +241,7 @@ export default function Team() {
           </span>
         ),
         key: f.field_key,
+        minWidth: 120,
         render: (_, record) => (
           editingId === record.id
             ? (
@@ -297,8 +301,8 @@ export default function Team() {
         onRefresh={load}
         refreshing={loading}
         actions={(
-          <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
-            Columns
+          <Button icon={<PlusOutlined />} onClick={() => setColumnOpen(true)}>
+            Add Columns
           </Button>
         )}
         addButton={(

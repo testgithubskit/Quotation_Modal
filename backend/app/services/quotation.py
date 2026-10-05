@@ -74,10 +74,22 @@ class QuotationService:
         extra = []
         status = params.pop("status", None)
         customer_id = params.pop("customer_id", None)
+        activity_id = params.pop("activity_id", None)
         if status:
             extra.append(Quotation.status == status)
         if customer_id:
             extra.append(Quotation.customer_id == customer_id)
+        if activity_id:
+            # Filter quotations that have items with this activity_id
+            from sqlalchemy import select
+            quotation_ids_with_activity = db.scalars(
+                select(QuotationItem.quotation_id).where(QuotationItem.activity_id == activity_id).distinct()
+            ).all()
+            if quotation_ids_with_activity:
+                extra.append(Quotation.id.in_(quotation_ids_with_activity))
+            else:
+                # No quotations have this activity, return empty
+                return [], 0
         if not _is_admin(current_user):
             extra.append(Quotation.created_by == current_user.id)
         return quotation_crud.list_by_org(db, current_user.organization_id, extra_filters=extra or None, **params)

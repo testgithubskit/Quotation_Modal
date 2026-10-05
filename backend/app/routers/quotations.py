@@ -50,12 +50,14 @@ def list_quotations(
     current_user: User = Depends(require_permission("quotations:read")),
     status_filter: QuotationStatus | None = Query(None, alias="status"),
     customer_id: UUID | None = Query(None),
+    activity_id: UUID | None = Query(None),
 ) -> PaginatedResponse[QuotationListResponse]:
     items, total = quotation_service.list(
         db,
         current_user,
         status=status_filter,
         customer_id=customer_id,
+        activity_id=activity_id,
         **pagination,
     )
     return PaginatedResponse.build(

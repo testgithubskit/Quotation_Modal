@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, Card, Col, Form, Input, Row, Space, Spin, Tabs, Typography, message } from 'antd';
-import { ColumnHeightOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons';
+import { PlusOutlined, EditOutlined, SaveOutlined } from '@ant-design/icons';
 import { useSearchParams } from 'react-router-dom';
 import { api, getApiErrorMessage } from '../../config/auth.js';
 import { useAuth } from '../../config/AuthContext.jsx';
@@ -143,8 +143,8 @@ function OrgDetails() {
               </Typography.Text>
             </div>
             <Space>
-              <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
-                Columns
+              <Button icon={<PlusOutlined />} onClick={() => setColumnOpen(true)}>
+                Add Columns
               </Button>
               <Button
                 icon={<EditOutlined />}

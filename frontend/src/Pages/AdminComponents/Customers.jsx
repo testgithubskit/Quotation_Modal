@@ -3,7 +3,7 @@ import {
   Button, Dropdown, Form, Input, Modal, Popconfirm, Select, Space, Table, Tooltip, message,
 } from 'antd';
 import {
-  PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
+  PlusOutlined, UploadOutlined, DownloadOutlined,
   EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined,
   FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons';
@@ -316,6 +316,7 @@ export default function Customers() {
       title: 'Customer Name',
       dataIndex: 'name',
       fixed: 'left',
+      minWidth: 150,
       sorter: (a, b) => String(a.name || '').localeCompare(String(b.name || '')),
       render: (v, record) => (
         editingId === record.id
@@ -326,6 +327,7 @@ export default function Customers() {
     {
       title: 'Company Name',
       dataIndex: 'notes',
+      minWidth: 150,
       sorter: (a, b) => String(a.notes || '').localeCompare(String(b.notes || '')),
       render: (v, record) => (
         editingId === record.id
@@ -336,6 +338,7 @@ export default function Customers() {
     {
       title: 'Email',
       dataIndex: 'email',
+      minWidth: 180,
       sorter: (a, b) => String(a.email || '').localeCompare(String(b.email || '')),
       render: (v, record) => (
         editingId === record.id
@@ -346,6 +349,7 @@ export default function Customers() {
     {
       title: 'Phone',
       dataIndex: 'phone',
+      minWidth: 130,
       sorter: (a, b) => String(a.phone || '').localeCompare(String(b.phone || '')),
       render: (v, record) => (
         editingId === record.id
@@ -369,6 +373,7 @@ export default function Customers() {
           </span>
         ),
         key: f.field_key,
+        minWidth: 120,
         sorter: (a, b) => String(a.custom_data?.[f.field_key] ?? '')
           .localeCompare(String(b.custom_data?.[f.field_key] ?? '')),
         render: (_, record) => (
@@ -441,8 +446,8 @@ export default function Customers() {
         refreshing={loading}
         actions={(
           <>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
-              Columns
+            <Button icon={<PlusOutlined />} onClick={() => setColumnOpen(true)}>
+              Add Columns
             </Button>
             <Button
               icon={<UploadOutlined />}

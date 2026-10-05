@@ -507,6 +507,7 @@ export default function GenerateReport() {
       customer,
       template: templateForQuotation({ custom_data: customData }, starredTemplate),
       organization,
+      activityCustomFields,
     };
 
     return { payload, previewCtx };

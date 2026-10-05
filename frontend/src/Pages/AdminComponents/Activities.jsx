@@ -3,7 +3,7 @@ import {
   Button, Dropdown, Form, Input, InputNumber, Modal, Popconfirm, Space, Table, Tooltip, message,
 } from 'antd';
 import {
-  PlusOutlined, UploadOutlined, DownloadOutlined, ColumnHeightOutlined,
+  PlusOutlined, UploadOutlined, DownloadOutlined,
   EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined,
   FileExcelOutlined, FilePdfOutlined,
 } from '@ant-design/icons';
@@ -204,10 +204,8 @@ export default function Activities() {
   const remove = async (id) => {
     try {
       // Check if activity has linked quotations
-      const { data: quotations } = await api.get('/quotations');
-      const linkedCount = quotations?.items?.filter(q => 
-        q.items?.some(item => item.activity_id === id)
-      )?.length || 0;
+      const { data: quotations } = await api.get('/quotations', { params: { activity_id: id } });
+      const linkedCount = quotations?.items?.length || 0;
 
       Modal.confirm({
         title: linkedCount > 0 ? 'Delete activity and linked reports?' : 'Delete activity?',
@@ -334,6 +332,7 @@ export default function Activities() {
     ...builtinFields.map((col) => ({
       title: col.field_label,
       key: col.field_key,
+      minWidth: 120,
       ...(col.field_key === 'code' ? { fixed: 'left' } : {}),
       sorter: (a, b) => {
         const av = col.field_key === 'unit_price'
@@ -349,6 +348,7 @@ export default function Activities() {
     ...customFields.map((f) => ({
       title: f.field_label,
       key: f.field_key,
+      minWidth: 120,
       sorter: (a, b) => String(a.custom_data?.[f.field_key] ?? '')
         .localeCompare(String(b.custom_data?.[f.field_key] ?? '')),
       render: (_, record) => (
@@ -399,8 +399,8 @@ export default function Activities() {
         refreshing={loading}
         actions={(
           <>
-            <Button icon={<ColumnHeightOutlined />} onClick={() => setColumnOpen(true)}>
-              Columns
+            <Button icon={<PlusOutlined />} onClick={() => setColumnOpen(true)}>
+              Add Columns
             </Button>
             <Button
               icon={<UploadOutlined />}

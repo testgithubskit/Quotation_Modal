@@ -252,11 +252,13 @@ export default function Dashboard() {
       } catch {
         organization = null;
       }
+      const activityCustomFields = await api.get('/custom-fields', { params: { entity_type: 'ACTIVITY' } }).then((r) => r.data.items || []);
       await pdfPreview.openPreview({
         report: full,
         customer: customersById[full.customer_id],
         template: templateForQuotation(full, template),
         organization,
+        activityCustomFields,
       });
     } catch (error) {
       message.error(getApiErrorMessage(error, 'Failed to open report'));

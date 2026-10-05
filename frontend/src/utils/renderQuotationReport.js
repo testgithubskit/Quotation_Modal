@@ -40,6 +40,7 @@ function lineFromParts({
   unit_price,
   total,
   isSub,
+  customFields = {},
 }) {
   return {
     slNo: String(slNo),
@@ -51,6 +52,7 @@ function lineFromParts({
     unit_price: Number(unit_price ?? 0),
     total: Number(total ?? (Number(quantity || 0) * Number(unit_price || 0))),
     isSub: Boolean(isSub),
+    customFields: customFields || {},
   };
 }
 
@@ -58,9 +60,19 @@ function lineFromParts({
  * Build line items with hierarchical Sl No (1, 2, 3.1, 3.2)
  * and activity names without codes.
  */
-export function resolveLineItems(report) {
+export function resolveLineItems(report, activityCustomFields = []) {
   const apiItems = report?.items || [];
   const saved = report?.custom_data?.activities;
+  const fieldKeys = activityCustomFields.map(f => f.field_key);
+
+  const extractCustomFields = (customData) => {
+    const fields = {};
+    fieldKeys.forEach(key => {
+      const val = customData?.[key];
+      if (val != null && val !== '') fields[key] = val;
+    });
+    return fields;
+  };
 
   if (Array.isArray(saved) && saved.length > 0) {
     const lines = [];
@@ -79,6 +91,10 @@ export function resolveLineItems(report) {
         unit_price: parentItem?.unit_price ?? a.unitRate ?? 0,
         total: parentItem?.total,
         isSub: false,
+        customFields: {
+          ...extractCustomFields(parentCd),
+          ...(a.customFields || {}),
+        },
       }));
       (a.subActivities || []).forEach((s, subIdx) => {
         const subItem = apiItems[apiIdx++];
@@ -93,6 +109,10 @@ export function resolveLineItems(report) {
           unit_price: subItem?.unit_price ?? s.unitRate ?? 0,
           total: subItem?.total,
           isSub: true,
+          customFields: {
+            ...extractCustomFields(subCd),
+            ...(s.customFields || {}),
+          },
         }));
       });
     });
@@ -123,20 +143,32 @@ export function resolveLineItems(report) {
       unit_price: item.unit_price,
       total: item.total,
       isSub,
+      customFields: extractCustomFields(cd),
     });
   });
 }
 
-function buildItemsTableHtml(items = [], grandTotal) {
+function buildItemsTableHtml(items = [], grandTotal, activityCustomFields = []) {
   const border = '1px solid #000';
   const pad = '3px 6px';
+  
+  // Build custom column headers and cells
+  const customHeaders = activityCustomFields.map(f => 
+    `<th style="border:${border};padding:${pad};text-align:left;font-weight:600">${esc(f.field_label)}</th>`
+  ).join('');
+  
   const rows = items.map((item) => {
     const qty = `${item.quantity} ${item.unit || ''}`.trim();
     const nameStyle = item.isSub ? 'padding-left:14px;' : '';
+    const customCells = activityCustomFields.map(f => 
+      `<td style="border:${border};padding:${pad}">${esc(item.customFields?.[f.field_key] || '')}</td>`
+    ).join('');
+    
     return `<tr>
       <td style="border:${border};padding:${pad};text-align:center">${item.slNo}</td>
       <td style="border:${border};padding:${pad};${nameStyle}">${esc(item.activityName)}</td>
       <td style="border:${border};padding:${pad}">${esc(item.description)}</td>
+      ${customCells}
       <td style="border:${border};padding:${pad};text-align:center">${esc(qty)}</td>
       <td style="border:${border};padding:${pad};text-align:right">${fmtMoney(item.unit_price)}</td>
       <td style="border:${border};padding:${pad};text-align:right;font-weight:600">${fmtMoney(item.total)}</td>
@@ -146,6 +178,7 @@ function buildItemsTableHtml(items = [], grandTotal) {
   const sumQty = items.reduce((acc, i) => acc + Number(i.quantity || 0), 0);
   const sum = items.reduce((acc, i) => acc + Number(i.total || 0), 0);
   const totalVal = grandTotal != null && grandTotal !== '' ? Number(grandTotal) : sum;
+  const customColSpan = activityCustomFields.length;
 
   return `<table style="width:100%;border-collapse:collapse;border-spacing:0;font-size:inherit;margin:0">
     <thead>
@@ -153,15 +186,16 @@ function buildItemsTableHtml(items = [], grandTotal) {
         <th style="border:${border};padding:${pad};text-align:center;width:48px;font-weight:600">Sl No</th>
         <th style="border:${border};padding:${pad};text-align:left;font-weight:600">Activity Name</th>
         <th style="border:${border};padding:${pad};text-align:left;font-weight:600">Description</th>
+        ${customHeaders}
         <th style="border:${border};padding:${pad};font-weight:600">Qty</th>
         <th style="border:${border};padding:${pad};text-align:right;font-weight:600">Rate</th>
         <th style="border:${border};padding:${pad};text-align:right;font-weight:600">Total</th>
       </tr>
     </thead>
     <tbody>
-      ${rows || `<tr><td colspan="6" style="border:${border};padding:${pad}">No items</td></tr>`}
+      ${rows || `<tr><td colspan="${6 + customColSpan}" style="border:${border};padding:${pad}">No items</td></tr>`}
       <tr>
-        <td colspan="3" style="border:${border};padding:${pad};font-weight:700">Total</td>
+        <td colspan="${3 + customColSpan}" style="border:${border};padding:${pad};font-weight:700">Total</td>
         <td style="border:${border};padding:${pad};font-weight:700;text-align:center">${sumQty}</td>
         <td style="border:${border};padding:${pad}"></td>
         <td style="border:${border};padding:${pad};font-weight:700;text-align:right">${fmtMoney(totalVal)}</td>
@@ -204,10 +238,10 @@ function fillPlaceholders(html, map) {
   return out;
 }
 
-export function buildPlaceholderMap({ report, customer, organization } = {}) {
+export function buildPlaceholderMap({ report, customer, organization, activityCustomFields = [] } = {}) {
   const cd = report?.custom_data || {};
   const header = cd.header || {};
-  const lineItems = resolveLineItems(report);
+  const lineItems = resolveLineItems(report, activityCustomFields);
   const map = {
     report_no: report?.quotation_number || header.reportNo || '',
     date: report?.quotation_date
@@ -219,7 +253,7 @@ export function buildPlaceholderMap({ report, customer, organization } = {}) {
     mobile: cd.mobileNumber || customer?.phone || '',
     email: cd.emailId || customer?.email || '',
     subject: cd.subject || '',
-    items_table: buildItemsTableHtml(lineItems, report?.total),
+    items_table: buildItemsTableHtml(lineItems, report?.total, activityCustomFields),
     grand_total: fmtMoney(report?.total),
     terms: Array.isArray(cd.termsAndConditions)
       ? cd.termsAndConditions.map(esc).join('<br/>')
@@ -255,7 +289,7 @@ export function buildPlaceholderMap({ report, customer, organization } = {}) {
   return map;
 }
 
-export function renderQuotationDocument({ report, customer, template, organization } = {}) {
+export function renderQuotationDocument({ report, customer, template, organization, activityCustomFields = [] } = {}) {
   const td = template?.template_data || {};
   const pageSettings = {
     ...DEFAULT_PAGE_SETTINGS,
@@ -268,7 +302,7 @@ export function renderQuotationDocument({ report, customer, template, organizati
     fontSize: td.fontSize || DEFAULT_PAGE_SETTINGS.fontSize,
   };
 
-  const map = buildPlaceholderMap({ report, customer, organization });
+  const map = buildPlaceholderMap({ report, customer, organization, activityCustomFields });
   const headerHtml = fillPlaceholders(td.headerHtml, map);
   const bodyHtml = fillPlaceholders(td.bodyHtml, map);
   const footerHtml = fillPlaceholders(td.footerHtml, map);
@@ -284,12 +318,12 @@ export function renderQuotationDocument({ report, customer, template, organizati
     footerHtml,
     hasContent,
     map,
-    lineItems: resolveLineItems(report),
+    lineItems: resolveLineItems(report, activityCustomFields),
   };
 }
 
-export function buildFilledDocumentHtml({ report, customer, template, organization } = {}) {
-  const doc = renderQuotationDocument({ report, customer, template, organization });
+export function buildFilledDocumentHtml({ report, customer, template, organization, activityCustomFields = [] } = {}) {
+  const doc = renderQuotationDocument({ report, customer, template, organization, activityCustomFields });
   const { pageSettings, headerHtml, bodyHtml, footerHtml, hasContent } = doc;
   if (!hasContent) return null;
 
@@ -349,23 +383,12 @@ export function buildFilledDocumentHtml({ report, customer, template, organizati
 }
 
 /** Excel rows matching the generate-report items grid. */
-export function quotationExcelRows(report) {
-  return resolveLineItems(report).map((row) => ({
-    'Sl No': row.slNo,
-    'Activity Name': row.activityName,
-    Description: row.description,
-    Specification: row.specification,
-    Qty: row.quantity,
-    Unit: row.unit,
-    'Unit Rate (₹)': row.unit_price,
-    'Total Cost (₹)': row.total,
-  }));
-}
-
-export function downloadQuotationExcel(report, {
+export function quotationExcelRows({
+  report,
   customer,
   organizationName = 'Organization',
   filename,
+  activityCustomFields = [],
 } = {}) {
   let name = filename || datedFilename(
     `quotation-${report?.quotation_number || 'report'}`,
@@ -378,9 +401,11 @@ export function downloadQuotationExcel(report, {
   }
 
   const cd = report?.custom_data || {};
-  const lines = resolveLineItems(report);
+  const lines = resolveLineItems(report, activityCustomFields);
+  const customColumnLabels = activityCustomFields.map(f => f.field_label);
   const columns = [
     'Sl No', 'Activity Name', 'Description', 'Specification',
+    ...customColumnLabels,
     'Qty', 'Unit', 'Unit Rate (₹)', 'Total Cost (₹)',
   ];
   const notes = Array.isArray(cd.activityNotes)
@@ -410,12 +435,13 @@ export function downloadQuotationExcel(report, {
       row.activityName,
       row.description,
       row.specification,
+      ...customColumnLabels.map(key => row.customFields?.[key] || ''),
       row.quantity,
       row.unit,
       row.unit_price,
       row.total,
     ]),
-    ['', '', '', '', '', '', 'Total', Number(report?.total || 0)],
+    ['', '', '', '', ...Array(customColumnLabels.length).fill(''), '', '', 'Total', Number(report?.total || 0)],
     [],
     ['Notes'],
     [notes || '—'],
@@ -436,6 +462,11 @@ export function downloadQuotationExcel(report, {
   XLSX.writeFile(workbook, name);
 }
 
+/** Alias for quotationExcelRows to match import name in GeneratedReportsTable */
+export function downloadQuotationExcel(report, options = {}) {
+  return quotationExcelRows({ report, ...options });
+}
+
 function triggerBlobDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -454,7 +485,7 @@ function quotationPdfFilename(report) {
   );
 }
 
-function buildQuotationPdfHtml({ report, customer, template, organization } = {}) {
+function buildQuotationPdfHtml({ report, customer, template, organization, activityCustomFields = [] } = {}) {
   const td = template?.template_data || {};
   const pageSettings = {
     ...DEFAULT_PAGE_SETTINGS,
@@ -462,10 +493,10 @@ function buildQuotationPdfHtml({ report, customer, template, organization } = {}
     margins: td.margins || DEFAULT_PAGE_SETTINGS.margins,
   };
 
-  let html = buildFilledDocumentHtml({ report, customer, template, organization });
+  let html = buildFilledDocumentHtml({ report, customer, template, organization, activityCustomFields });
   if (!html) {
-    const lines = resolveLineItems(report);
-    const table = buildItemsTableHtml(lines, report?.total);
+    const lines = resolveLineItems(report, activityCustomFields);
+    const table = buildItemsTableHtml(lines, report?.total, activityCustomFields);
     html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(report?.quotation_number || 'Report')}</title>
 <style>
   @page { size: ${pageSettings.pageSize} ${pageSettings.orientation}; margin: 5mm; }
