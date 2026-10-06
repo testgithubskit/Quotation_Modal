@@ -89,7 +89,7 @@ export default function Sidebar({
           </div>
           {!collapsed ? (
             <span className="truncate text-base font-semibold tracking-tight text-slate-800">
-              Quotation Modal
+              Quotation Module
             </span>
           ) : null}
         </div>

@@ -30,7 +30,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { CellSelection, selectionCell } from '@tiptap/pm/tables';
-import { api, getApiErrorMessage } from '../config/auth.js';
+import { api, getApiErrorMessage } from '../../config/auth.js';
 import {
   DEFAULT_PAGE_SETTINGS,
   FONT_FAMILY_OPTIONS,
@@ -38,9 +38,9 @@ import {
   PAGE_SIZE_OPTIONS,
   REPORT_PLACEHOLDERS,
   pagePixelSize,
-} from '../utils/reportPlaceholders.js';
-import { datedFilename, downloadRowsExcel } from '../utils/spreadsheet.js';
-import { preserveBlankParagraphs } from '../utils/renderQuotationReport.js';
+} from '../../utils/reportPlaceholders.js';
+import { datedFilename, downloadRowsExcel } from '../../utils/spreadsheet.js';
+import { preserveBlankParagraphs } from '../../utils/renderQuotationReport.js';
 import { ResizableImage } from './tiptap/ResizableImage.jsx';
 import TableGripControls from './tiptap/TableGripControls.jsx';
 import SelectionFormatToolbar from './tiptap/SelectionFormatToolbar.jsx';

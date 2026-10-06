@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { api, getApiErrorMessage } from '../../config/auth.js';
-import ReportTemplateEditor from '../../Components/ReportTemplateEditor';
+import ReportTemplateEditor from '../../Components/Report Designer components/ReportTemplateEditor';
 
 const PAGE_SIZE = 8;
 

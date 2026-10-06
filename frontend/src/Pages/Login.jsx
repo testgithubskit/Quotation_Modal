@@ -9,6 +9,7 @@ import {
   phoneFieldRules,
   phoneInputProps,
 } from '../utils/phoneValidation.js';
+import DotField from '../Components/DotField';
 
 export default function Login() {
   const { login, registerOrganization, getApiErrorMessage } = useAuth();
@@ -83,16 +84,30 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 font-sans">
+    <div className="relative flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10 font-sans overflow-hidden">
+      <div className="absolute inset-0 z-0">
+        <DotField
+          dotRadius={3.5}
+          dotSpacing={12}
+          bulgeStrength={67}
+          glowRadius={80}
+          sparkle={false}
+          waveAmplitude={0}
+          bulgeOnly={false}
+          gradientFrom="#0D9488"
+          gradientTo="#84CC16"
+          glowColor="#0D9488"
+        />
+      </div>
       <AnimatePresence mode="wait">
-        {mode === 'login' ? (
+       {mode === 'login' ? (
           <motion.div
             key="login"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
+            className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
           >
             <Typography.Title level={3} className="!mb-1 !font-sans !text-slate-800">
               Sign in
@@ -158,7 +173,7 @@ export default function Login() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
+            className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"
           >
             <Typography.Title level={3} className="!mb-1 !font-sans !text-slate-800">
               Sign up

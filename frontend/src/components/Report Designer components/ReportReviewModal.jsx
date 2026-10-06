@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Form, Input, Modal, message } from 'antd';
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons';
-import { api, getApiErrorMessage } from '../config/auth.js';
+import { api, getApiErrorMessage } from '../../config/auth.js';
 
 const REMARK_MAX = 500;
 

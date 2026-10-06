@@ -16,7 +16,7 @@ import {
   phoneFieldRules,
   phoneInputProps,
 } from '../../utils/phoneValidation.js';
-import QuotationPdfPreviewModal from '../../Components/QuotationPdfPreviewModal.jsx';
+import QuotationPdfPreviewModal from '../../Components/Report Designer components/QuotationPdfPreviewModal.jsx';
 import useQuotationPdfPreview from '../../hooks/useQuotationPdfPreview.js';
 
 const UNIT_OPTIONS = ['Nos', 'Set', 'Each', 'Parameter', 'Hour', 'Day'];

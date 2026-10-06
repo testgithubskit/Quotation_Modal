@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Modal, Form, Input, Select, List, Button, Typography, Tag, Switch, Space } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
-import { slugifyFieldKey } from '../utils/reportFormSchema.js';
+import { slugifyFieldKey } from '../../utils/reportFormSchema.js';
 
 const FIELD_TYPES = [
   { value: 'text', label: 'Text' },

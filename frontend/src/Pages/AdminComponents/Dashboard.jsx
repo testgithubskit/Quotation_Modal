@@ -9,7 +9,7 @@ import {
   TeamOutlined,
   UserOutlined,
 } from '@ant-design/icons';
-import QuotationPdfPreviewModal from '../../Components/QuotationPdfPreviewModal.jsx';
+import QuotationPdfPreviewModal from '../../Components/Report Designer components/QuotationPdfPreviewModal.jsx';
 import useQuotationPdfPreview from '../../hooks/useQuotationPdfPreview.js';
 import { useNavigate } from 'react-router-dom';
 import dayjs from 'dayjs';

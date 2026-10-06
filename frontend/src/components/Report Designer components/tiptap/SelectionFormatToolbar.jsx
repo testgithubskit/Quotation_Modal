@@ -7,7 +7,7 @@ import {
   ClearOutlined, CloseOutlined, FontColorsOutlined, BgColorsOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS } from '../../utils/reportPlaceholders.js';
+import { FONT_FAMILY_OPTIONS, FONT_SIZE_OPTIONS } from '../../../utils/reportPlaceholders.js';
 import { applyEditorFont, activeEditorFont } from './ReportPlaceholder.js';
 
 function Btn({ title, active, onClick, icon }) {
