@@ -17,11 +17,17 @@ import {
   phoneInputProps,
 } from '../../utils/phoneValidation.js';
 
+const ROLE_OPTIONS = [
+  { value: 'ADMIN', label: 'Admin' },
+  { value: 'USER', label: 'User' },
+];
+
 export default function Team() {
   const [rows, setRows] = useState([]);
   const [fields, setFields] = useState([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [createOpen, setCreateOpen] = useState(false);
@@ -74,7 +80,19 @@ export default function Team() {
     };
   }, []);
 
-  const filtered = rows.filter((r) => recordMatchesSearch(r, search));
+  useEffect(() => {
+    setPage(1);
+  }, [search, roleFilter]);
+
+  const filtered = useMemo(() => {
+    let list = rows.filter((r) => recordMatchesSearch(r, search));
+    if (roleFilter.length) {
+      const set = new Set(roleFilter);
+      list = list.filter((r) => set.has(r.role_name));
+    }
+    return list;
+  }, [rows, search, roleFilter]);
+
   const paged = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const startEdit = (record) => {
@@ -197,7 +215,6 @@ export default function Team() {
       title: 'Role',
       dataIndex: 'role_name',
       minWidth: 140,
-      sorter: (a, b) => String(a.role_name || '').localeCompare(String(b.role_name || '')),
       render: (v, record) => (
         editingId === record.id
           ? (
@@ -205,10 +222,7 @@ export default function Team() {
               className="w-full"
               value={draft.role_name}
               onChange={(val) => setField('role_name', val)}
-              options={[
-                { value: 'USER', label: 'User' },
-                { value: 'ADMIN', label: 'Admin' },
-              ]}
+              options={ROLE_OPTIONS}
             />
           )
           : v
@@ -300,6 +314,18 @@ export default function Team() {
         }}
         onRefresh={load}
         refreshing={loading}
+        filter={(
+          <Select
+            mode="multiple"
+            allowClear
+            placeholder="Filter by role"
+            className="w-40"
+            value={roleFilter}
+            onChange={setRoleFilter}
+            options={ROLE_OPTIONS}
+            maxTagCount="responsive"
+          />
+        )}
         actions={(
           <Button icon={<PlusOutlined />} onClick={() => setColumnOpen(true)}>
             Add Columns
@@ -369,11 +395,7 @@ export default function Team() {
             <Input {...phoneInputProps()} />
           </Form.Item>
           <Form.Item name="role_name" label="Role" rules={[{ required: true }]}>
-            <Select options={[
-              { value: 'USER', label: 'User' },
-              { value: 'ADMIN', label: 'Admin' },
-            ]}
-            />
+            <Select options={ROLE_OPTIONS} />
           </Form.Item>
           <Form.Item name="password" label="Password" rules={[{ required: true, min: 8 }]}>
             <Input.Password />

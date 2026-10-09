@@ -26,6 +26,12 @@ import {
 
 const PAGE_SIZE_GRID = 8;
 
+const STATUS_OPTIONS = [
+  { value: 'SENT', label: 'Pending' },
+  { value: 'ACCEPTED', label: 'Accepted' },
+  { value: 'REJECTED', label: 'Rejected' },
+];
+
 function workflowStatusLabel(status) {
   if (status === 'ACCEPTED') return 'Accepted';
   if (status === 'REJECTED') return 'Rejected';
@@ -299,6 +305,7 @@ export default function GeneratedReports() {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [customerFilter, setCustomerFilter] = useState([]);
+  const [statusFilter, setStatusFilter] = useState([]);
   const [view, setView] = useState('grid');
   const [sortBy, setSortBy] = useState('date');
   const [page, setPage] = useState(1);
@@ -386,7 +393,7 @@ export default function GeneratedReports() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, sortBy, view, customerFilter]);
+  }, [search, sortBy, view, customerFilter, statusFilter]);
 
   useEffect(() => {
     const focusId = location.state?.focusQuotationId;
@@ -416,6 +423,10 @@ export default function GeneratedReports() {
       const allowed = new Set(customerFilter);
       list = list.filter((r) => allowed.has(customersById[r.customer_id]?.name));
     }
+    if (statusFilter.length) {
+      const allowed = new Set(statusFilter);
+      list = list.filter((r) => allowed.has(r.status));
+    }
     const sorted = [...list];
     sorted.sort((a, b) => {
       if (sortBy === 'name') {
@@ -427,7 +438,7 @@ export default function GeneratedReports() {
       return dayjs(b.created_at || 0).valueOf() - dayjs(a.created_at || 0).valueOf();
     });
     return sorted;
-  }, [rows, search, customerFilter, customersById, templatesById, sortBy]);
+  }, [rows, search, customerFilter, statusFilter, customersById, templatesById, sortBy]);
 
   const customerOptions = useMemo(() => {
     const names = new Set();
@@ -565,6 +576,16 @@ export default function GeneratedReports() {
             onChange={setCustomerFilter}
             options={customerOptions}
             optionFilterProp="label"
+            maxTagCount="responsive"
+          />
+          <Select
+            mode="multiple"
+            allowClear
+            placeholder="Filter by status"
+            className="w-40 shrink-0"
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={STATUS_OPTIONS}
             maxTagCount="responsive"
           />
         </div>
@@ -734,6 +755,7 @@ export default function GeneratedReports() {
                 title: 'Customer',
                 key: 'customer',
                 minWidth: 150,
+                sorter: (a, b) => String(customersById[a.customer_id]?.name || '').localeCompare(String(customersById[b.customer_id]?.name || '')),
                 render: (_, r) => customersById[r.customer_id]?.name || '—',
               },
               {
@@ -773,6 +795,7 @@ export default function GeneratedReports() {
                 title: 'Reviewed by',
                 key: 'reviewed_by',
                 minWidth: 130,
+                sorter: (a, b) => String(a.reviewed_by_name || '').localeCompare(String(b.reviewed_by_name || '')),
                 render: (_, r) => r.reviewed_by_name || '—',
               },
               {

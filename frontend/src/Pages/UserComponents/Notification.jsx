@@ -4,7 +4,7 @@ import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import { api, getApiErrorMessage } from '../../config/auth.js';
-import { recordMatchesSearch, slNoColumn } from '../../utils/tableHelpers';
+import { configTableScroll, recordMatchesSearch, slNoColumn } from '../../utils/tableHelpers';
 
 const REPORTS_PATH = '/user/reports';
 
@@ -146,6 +146,8 @@ export default function Notification() {
     {
       title: 'Report No',
       dataIndex: 'quotation_number',
+      minWidth: 150,
+      sorter: (a, b) => String(a.quotation_number || '').localeCompare(String(b.quotation_number || '')),
       render: (v, r) => (
         <button
           type="button"
@@ -159,11 +161,15 @@ export default function Notification() {
     {
       title: 'Customer',
       dataIndex: 'customer_name',
+      minWidth: 150,
+      sorter: (a, b) => String(a.customer_name || '').localeCompare(String(b.customer_name || '')),
       render: (v) => v || '—',
     },
     {
       title: 'Submitted at',
       dataIndex: 'submitted_at',
+      minWidth: 180,
+      sorter: (a, b) => dayjs(a.submitted_at || 0).valueOf() - dayjs(b.submitted_at || 0).valueOf(),
       render: (v) => (v ? dayjs(v).format('DD MMM YYYY, HH:mm:ss') : '—'),
     },
     {
@@ -178,18 +184,22 @@ export default function Notification() {
     {
       title: 'Remarks',
       dataIndex: 'review_remark',
+      minWidth: 150,
       ellipsis: true,
       render: (v) => (v ? <span title={v}>{v}</span> : '—'),
     },
     {
       title: 'Reviewed by',
       dataIndex: 'reviewed_by_name',
+      minWidth: 130,
+      sorter: (a, b) => String(a.reviewed_by_name || '').localeCompare(String(b.reviewed_by_name || '')),
       render: (v) => v || '—',
     },
     {
       title: 'Acknowledge',
       key: 'ack',
       width: 160,
+      fixed: 'right',
       align: 'center',
       render: (_, r) => (
         <AcknowledgeCell
@@ -262,6 +272,7 @@ export default function Notification() {
           loading={loading}
           dataSource={paged}
           columns={columns}
+          scroll={configTableScroll}
           rowSelection={{
             selectedRowKeys: selected,
             onChange: setSelected,
